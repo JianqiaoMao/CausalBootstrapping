@@ -1,5 +1,5 @@
 
-import algorithms as algs
+import grapl.algorithms as algs
 import grapl.dsl as dsl
 import inspect
 import numpy as np
@@ -177,195 +177,7 @@ def simu_bootstrapper(data, weight_func, intv_var_value, n_sample, mode = "fast"
         bootstrap_data["intv_"+intv_var if intv_var in bootstrap_data.keys() else intv_var] = intv_value_i[sample_indices]
     return bootstrap_data, weights
 
-def backdoor_simple(cause_data, effect_data, confounder_data, dist_map, kernel_intv = None):
-    """
-    Perform backdoor causal bootstrapping to de-confound the causal effect using the provided observational data and distribution maps.
-
-    Parameters:
-        cause_data (dict): A dictionary containing the cause variable name as a key and its data array as the value.
-        effect_data (dict): A dictionary containing the effect variable name as a key and its data array as the value.
-        confounder_data (dict): A dictionary containing the confounder variable name as a key and its data array as the value.
-        dist_map (dict): A dictionary mapping tuples of variable combinations to their corresponding distribution functions.
-        kernel_intv (function, optional): The kernel function to be used in the backdoor bootstrapping for the cause variable. Defaults to None.
-
-    Returns:
-        dict: A dictionary containing variable names as keys and their corresponding de-confounded data arrays as values.
-    """
-    
-    cause_var_name = list(cause_data.keys())[0]
-    effect_var_name = list(effect_data.keys())[0]
-    confounder_var_name = list(confounder_data.keys())[0]
-    
-    data = cause_data.copy()
-    data.update(effect_data)
-    data.update(confounder_data)
-    
-    causal_graph = cause_var_name + ";" + effect_var_name + ";" + confounder_var_name + "; \n"
-    causal_graph = causal_graph + cause_var_name + "->" + effect_var_name + "; \n"
-    causal_graph = causal_graph + confounder_var_name + "->" + effect_var_name + "; \n"
-    causal_graph = causal_graph + confounder_var_name + "->" + cause_var_name + "; \n"
-    
-    grapl_obj = dsl.GraplDSL()
-    G = grapl_obj.readgrapl(causal_graph)
-    id_str, id_eqn, isident = algs.idfixing(G, {cause_var_name}, {effect_var_name}) 	
-    if kernel_intv is None:
-        kernel_intv = eval("lambda _intv_var," + cause_var_name + ": 1 if _intv_var==" + cause_var_name + " else 0")
-        intv_var_name = '_intv_var'
-    else:
-        kernel_params = set(inspect.signature(kernel_intv).parameters.keys())
-        intv_var_name = list(kernel_params - set(data.keys()))
-        if len(intv_var_name) == 0:
-            intv_var_name = "_intv_var"
-        else:
-            intv_var_name = intv_var_name[0]
-    
-    N = cause_data[cause_var_name].shape[0]
-    w_func = weight_func(intv_prob = id_eqn, dist_map = dist_map, N = N, kernel = kernel_intv)
-    
-    # may be problematic for continous cause variable
-    cause_unique = set(cause_data.get(cause_var_name).reshape(-1))
-    weights = np.zeros((N, len(cause_unique)))
-    for i, y in enumerate(cause_unique):
-        weights[:,i]=weight_compute(weight_func = w_func, data = data ,intv_var = {intv_var_name: [y for i in range(N)]})
-    # weights = np.array(weights).T
-    
-    bootstrapped_data = bootstrapper(data = data, weights = weights, intv_var_name_in_data = [cause_var_name], mode = 'fast')
-
-    return bootstrapped_data
-
-def backdoor_simu(cause_data, effect_data, confounder_data, dist_map, intv_value, n_sample, kernel_intv = None):
-    """
-    Perform simulational backdoor causal bootstrapping to de-confound the causal effect using the provided observational data and distribution maps.
-
-    Parameters:
-        cause_data (dict): A dictionary containing the cause variable name as a key and its data array as the value.
-        effect_data (dict): A dictionary containing the effect variable name as a key and its data array as the value.
-        confounder_data (dict): A dictionary containing the confounder variable name as a key and its data array as the value.
-        dist_map (dict): A dictionary mapping tuples of variable combinations to their corresponding distribution functions.
-        intv_value (list): A list containing the interventional value.
-        n_sample (int): The number of samples to be generated through bootstrapping.
-        kernel_intv (function, optional): The kernel function to be used in the backdoor adjustment for the cause variable. Defaults to None.
-
-    Returns:
-        dict: A dictionary containing variable names as keys and their corresponding de-confounded data arrays as values.
-    """
- 	
-    cause_var_name = list(cause_data.keys())[0]
-    effect_var_name = list(effect_data.keys())[0]
-    confounder_var_name = list(confounder_data.keys())[0]
-    
-    data = cause_data.copy()
-    data.update(effect_data)
-    data.update(confounder_data)
-    
-    causal_graph = cause_var_name + ";" + effect_var_name + ";" + confounder_var_name + "; \n"
-    causal_graph = causal_graph + cause_var_name + "->" + effect_var_name + "; \n"
-    causal_graph = causal_graph + confounder_var_name + "->" + effect_var_name + "; \n"
-    causal_graph = causal_graph + confounder_var_name + "->" + cause_var_name + "; \n"
-    
-    grapl_obj = dsl.GraplDSL()
-    G = grapl_obj.readgrapl(causal_graph)
-    id_str, id_eqn, isident = algs.idfixing(G, {cause_var_name}, {effect_var_name}) 
-	
-    if kernel_intv is None:
-        intv_var_name = "intv_" + cause_var_name
-        kernel_intv = eval("lambda " + intv_var_name + "," +cause_var_name + ": 1 if " + intv_var_name+ "==" + cause_var_name + " else 0")
-    else:
-        kernel_params = set(inspect.signature(kernel_intv).parameters.keys())
-        intv_var_name = list(kernel_params - set(data.keys()))[0]
-            
-    N = cause_data[cause_var_name].shape[0]
-    w_func = weight_func(intv_prob = id_eqn, dist_map = dist_map, N = N, kernel = kernel_intv)
-    bootstrapped_data, weights = simu_bootstrapper(data = data, weight_func = w_func, intv_var_value = {intv_var_name: intv_value}, n_sample = n_sample, mode = 'fast')
-    
-    return bootstrapped_data
-
-def frontdoor_simple(cause_data, mediator_data, effect_data, dist_map):
-    """
-    Perform fontdoor causal bootstrapping to de-confound the causal effect using the provided observational data and distribution maps.
-
-    Parameters:
-        cause_data (dict): A dictionary containing the cause variable name as a key and its data array as the value.
-        mediator_data (dict): A dictionary containing the mediator variable name as a key and its data array as the value.
-        effect_data (dict): A dictionary containing the effect variable name as a key and its data array as the value.
-        dist_map (dict): A dictionary mapping tuples of variable combinations to their corresponding distribution functions.
-
-    Returns:
-        dict: A dictionary containing variable names as keys and their corresponding de-confounded data arrays as values.
-    """
-
-    cause_var_name = list(cause_data.keys())[0]
-    effect_var_name = list(effect_data.keys())[0]
-    mediator_var_name = list(mediator_data.keys())[0]
-    
-    data = {cause_var_name+"'": list(cause_data.values())[0]}
-    data.update(effect_data)
-    data.update(mediator_data)
-    
-    causal_graph = cause_var_name + ";" + effect_var_name + ";" + mediator_var_name + "; \n"
-    causal_graph = causal_graph + cause_var_name + "->" + mediator_var_name + "; \n"
-    causal_graph = causal_graph + mediator_var_name + "->" + effect_var_name + "; \n"
-    causal_graph = causal_graph + cause_var_name + "<->" + effect_var_name + "; \n"
-    
-    grapl_obj = dsl.GraplDSL()
-    G = grapl_obj.readgrapl(causal_graph)
-    id_str, id_eqn, isident = algs.idfixing(G, {cause_var_name}, {effect_var_name}) 
-    
-    N = cause_data[cause_var_name].shape[0]
-    w_func = weight_func(intv_prob = id_eqn, dist_map = dist_map, N = N, kernel = None)
-    # trick: now the Y' should be the observational values
-    
-    cause_unique = set(cause_data.get(cause_var_name).reshape(-1))
-    weights = np.zeros((N, len(cause_unique)))
-    for i, y in enumerate(cause_unique):
-        weights[:,i]=weight_compute(weight_func = w_func, data = data ,intv_var = {cause_var_name: [y for i in range(N)]})
-    bootstrapped_data = bootstrapper(data = data, weights = weights, intv_var_name_in_data = [cause_var_name+"'"], mode = 'fast')
-
-    return bootstrapped_data
-
-def frontdoor_simu(cause_data, mediator_data, effect_data, dist_map, intv_value, n_sample):
-    """
-    Perform simulational frontdoor causal bootstrapping to de-confound the causal effect using the provided observational data and distribution maps.
-
-    Parameters:
-        cause_data (dict): A dictionary containing the cause variable name as a key and its data array as the value.
-        mediator_data (dict): A dictionary containing the mediator variable name as a key and its data array as the value.
-        effect_data (dict): A dictionary containing the effect variable name as a key and its data array as the value.
-        dist_map (dict): A dictionary mapping tuples of variable combinations to their corresponding distribution functions.
-        intv_value (list): A list containing the interventional value.
-        n_sample (int): The number of samples to be generated through bootstrapping.
-
-    Returns:
-        dict: A dictionary containing variable names as keys and their corresponding de-confounded data arrays as values.
-    """
-    
-    cause_var_name = list(cause_data.keys())[0]
-    effect_var_name = list(effect_data.keys())[0]
-    mediator_var_name = list(mediator_data.keys())[0]
-    
-    data = {cause_var_name+"'": list(cause_data.values())[0]}
-    data.update(effect_data)
-    data.update(mediator_data)
-    
-    causal_graph = cause_var_name + ";" + effect_var_name + ";" + mediator_var_name + "; \n"
-    causal_graph = causal_graph + cause_var_name + "->" + mediator_var_name + "; \n"
-    causal_graph = causal_graph + mediator_var_name + "->" + effect_var_name + "; \n"
-    causal_graph = causal_graph + cause_var_name + "<->" + effect_var_name + "; \n"
-    
-    grapl_obj = dsl.GraplDSL()
-    G = grapl_obj.readgrapl(causal_graph)
-    id_str, id_eqn, isident = algs.idfixing(G, {cause_var_name}, {effect_var_name}) 
-	
-    intv_var_name = cause_var_name
-    
-    N = cause_data[cause_var_name].shape[0]
-    w_func = weight_func(intv_prob = id_eqn, dist_map = dist_map, N = N)
-    bootstrapped_data, weights = simu_bootstrapper(data = data, weight_func = w_func, intv_var_value = {intv_var_name: intv_value}, n_sample = n_sample, mode = 'fast')
-    
-    return bootstrapped_data
-
-
-def general_cb_analysis(causal_graph, effect_var_name, cause_var_name):
+def general_cb_analysis(causal_graph, effect_var_name, cause_var_name, info_print = True):
     
     """
     Perform pre-analysis for the given causal graph with intended cause(intenventional) and effect variables to formulate the weight function.
@@ -405,7 +217,6 @@ def general_cb_analysis(causal_graph, effect_var_name, cause_var_name):
     
     cause_var = id_eqn_all[0].lhs.dov
     eff_var = id_eqn_all[0].lhs.num[0]
-    
     for i,id_eqn in enumerate(id_eqn_all):
         
         w_denom = id_eqn.rhs.den
@@ -449,44 +260,48 @@ def general_cb_analysis(causal_graph, effect_var_name, cause_var_name):
             best_w_denom = w_denom
             best_id_str = id_str_all[i]
             best_id_eqn = id_eqn
-    print("Interventional prob.:{}".format(best_id_str))
-    
-    wanted_dist = []
-    w_nom_str = ""
-    for nom in best_w_nom:
-        joint_var_str = ""
-        for i in range(len(nom)):
-            joint_var_str += nom[i]
-            if i != len(nom)-1:
-                joint_var_str += ","
-        w_nom_str += "P(" + joint_var_str + ")"
-        wanted_dist.append("P(" + joint_var_str + ")")
-    if kernel_flag:
-        kernel_func_str = "K("+list(cause_var)[0]+","+list(cause_var)[0]+"')"
-        w_nom_str += kernel_func_str
-    
-    w_denom_str = ""
-    for denom in best_w_denom:
-        joint_var_str = ""
-        for i in range(len(denom)):
-            joint_var_str += denom[i]
-            if i != len(denom)-1:
-                joint_var_str += ","
-        w_denom_str += "P(" + joint_var_str + ")"
-        wanted_dist.append("P(" + joint_var_str + ")")
+            
+    weight_func_lam = lambda dist_map, N, kernel: weight_func(best_id_eqn, dist_map, N, kernel)        
+    # print out interventional probability expression and required distributions
+    if info_print:
+        print("Interventional prob.:{}".format(best_id_str))
         
-    weight_func_str = "["+w_nom_str+"]"+"/N*[" +w_denom_str + "]"
-    
-    print("Causal bootstrapping weights function: {}".format(weight_func_str))
-    print("Required distributions:")
-    i = 0
-    for dist in wanted_dist:
-        i += 1
-        print("{}: {}".format(i, dist))
-    if kernel_flag:
-        print("Kernel function required: {}".format(kernel_func_str))
-    
-    weight_func_lam = lambda dist_map, N, kernel: weight_func(best_id_eqn, dist_map, N, kernel)
+        wanted_dist = []
+        w_nom_str = ""
+        for nom in best_w_nom:
+            joint_var_str = ""
+            for i in range(len(nom)):
+                joint_var_str += nom[i]
+                if i != len(nom)-1:
+                    joint_var_str += ","
+            w_nom_str += "P(" + joint_var_str + ")"
+            wanted_dist.append("P(" + joint_var_str + ")")
+        if kernel_flag:
+            kernel_func_str = "K("+list(cause_var)[0]+","+list(cause_var)[0]+"')"
+            w_nom_str += kernel_func_str
+        
+        w_denom_str = ""
+        for denom in best_w_denom:
+            joint_var_str = ""
+            for i in range(len(denom)):
+                joint_var_str += denom[i]
+                if i != len(denom)-1:
+                    joint_var_str += ","
+            w_denom_str += "P(" + joint_var_str + ")"
+            wanted_dist.append("P(" + joint_var_str + ")")
+            
+        weight_func_str = "["+w_nom_str+"]"+"/N*[" +w_denom_str + "]"
+        
+        print("Causal bootstrapping weights function: {}".format(weight_func_str))
+        print("Required distributions:")
+        i = 0
+        for dist in wanted_dist:
+            i += 1
+            print("{}: {}".format(i, dist))
+        if kernel_flag:
+            print("Kernel function required: {}".format(kernel_func_str))
+    else:
+        weight_func_str = None
     
     return weight_func_lam, weight_func_str
 
@@ -509,8 +324,182 @@ def general_causal_bootstrapping_simple(weight_func_lam, dist_map, data, intv_va
     return bootstrapped_data
 
 def general_causal_bootstrapping_simu(weight_func_lam, dist_map, data, intv_var_value, n_sample, kernel = None):
+    
     N = list(data.values())[0].shape[0]
     w_func = weight_func_lam(dist_map = dist_map, N = N, kernel = kernel)
-    bootstrapped_data = simu_bootstrapper(data = data, weight_func = w_func, intv_var_value = intv_var_value, n_sample = n_sample, mode = 'fast')
+    bootstrapped_data, weights = simu_bootstrapper(data = data, weight_func = w_func, intv_var_value = intv_var_value, n_sample = n_sample, mode = 'fast')
     
     return bootstrapped_data
+
+def backdoor_simple(cause_data, effect_data, confounder_data, dist_map, kernel_intv = None):
+    """
+    Perform backdoor causal bootstrapping to de-confound the causal effect using the provided observational data and distribution maps.
+
+    Parameters:
+        cause_data (dict): A dictionary containing the cause variable name as a key and its data array as the value.
+        effect_data (dict): A dictionary containing the effect variable name as a key and its data array as the value.
+        confounder_data (dict): A dictionary containing the confounder variable name as a key and its data array as the value.
+        dist_map (dict): A dictionary mapping tuples of variable combinations to their corresponding distribution functions.
+        kernel_intv (function, optional): The kernel function to be used in the backdoor bootstrapping for the cause variable. Defaults to None.
+
+    Returns:
+        dict: A dictionary containing variable names as keys and their corresponding de-confounded data arrays as values.
+    """
+    
+    cause_var_name = list(cause_data.keys())[0]
+    effect_var_name = list(effect_data.keys())[0]
+    confounder_var_name = list(confounder_data.keys())[0]
+    
+    data = cause_data.copy()
+    data.update(effect_data)
+    data.update(confounder_data)
+    
+    causal_graph = cause_var_name + ";" + effect_var_name + ";" + confounder_var_name + "; \n"
+    causal_graph = causal_graph + cause_var_name + "->" + effect_var_name + "; \n"
+    causal_graph = causal_graph + confounder_var_name + "->" + effect_var_name + "; \n"
+    causal_graph = causal_graph + confounder_var_name + "->" + cause_var_name + "; \n"
+    
+    weight_func_lam, weight_func_str = general_cb_analysis(causal_graph = causal_graph, 
+                                                           effect_var_name = effect_var_name, 
+                                                           cause_var_name = cause_var_name, info_print= False)
+    
+    if kernel_intv is None:
+        intv_var_name = "intv_" + cause_var_name
+        kernel_intv = eval("lambda "+intv_var_name+","+cause_var_name+": 1 if "+intv_var_name+"==" + cause_var_name + " else 0")
+    else:
+        kernel_params = set(inspect.signature(kernel_intv).parameters.keys())
+        intv_var_name = list(kernel_params - set(data.keys()))
+        if len(intv_var_name) == 0:
+            intv_var_name = "intv_" + cause_var_name
+        else:
+            intv_var_name = intv_var_name[0]
+    cb_data = general_causal_bootstrapping_simple(weight_func_lam = weight_func_lam, 
+                                                  dist_map = dist_map, data = data, 
+                                                  intv_var_name = cause_var_name, kernel = kernel_intv)
+
+    return cb_data
+
+def backdoor_simu(cause_data, effect_data, confounder_data, dist_map, intv_value, n_sample, kernel_intv = None):
+    """
+    Perform simulational backdoor causal bootstrapping to de-confound the causal effect using the provided observational data and distribution maps.
+
+    Parameters:
+        cause_data (dict): A dictionary containing the cause variable name as a key and its data array as the value.
+        effect_data (dict): A dictionary containing the effect variable name as a key and its data array as the value.
+        confounder_data (dict): A dictionary containing the confounder variable name as a key and its data array as the value.
+        dist_map (dict): A dictionary mapping tuples of variable combinations to their corresponding distribution functions.
+        intv_value (list): A list containing the interventional value.
+        n_sample (int): The number of samples to be generated through bootstrapping.
+        kernel_intv (function, optional): The kernel function to be used in the backdoor adjustment for the cause variable. Defaults to None.
+
+    Returns:
+        dict: A dictionary containing variable names as keys and their corresponding de-confounded data arrays as values.
+    """
+ 	
+    cause_var_name = list(cause_data.keys())[0]
+    effect_var_name = list(effect_data.keys())[0]
+    confounder_var_name = list(confounder_data.keys())[0]
+    
+    data = cause_data.copy()
+    data.update(effect_data)
+    data.update(confounder_data)
+    
+    causal_graph = cause_var_name + ";" + effect_var_name + ";" + confounder_var_name + "; \n"
+    causal_graph = causal_graph + cause_var_name + "->" + effect_var_name + "; \n"
+    causal_graph = causal_graph + confounder_var_name + "->" + effect_var_name + "; \n"
+    causal_graph = causal_graph + confounder_var_name + "->" + cause_var_name + "; \n"
+    
+    weight_func_lam, weight_func_str = general_cb_analysis(causal_graph = causal_graph, 
+                                                           effect_var_name = effect_var_name, 
+                                                           cause_var_name = cause_var_name, info_print= False)
+    
+    if kernel_intv is None:
+        intv_var_name = "intv_" + cause_var_name
+        kernel_intv = eval("lambda "+intv_var_name+","+cause_var_name+": 1 if "+intv_var_name+"==" + cause_var_name + " else 0")
+    else:
+        kernel_params = set(inspect.signature(kernel_intv).parameters.keys())
+        intv_var_name = list(kernel_params - set(data.keys()))
+        if len(intv_var_name) == 0:
+            intv_var_name = "intv_" + cause_var_name
+        else:
+            intv_var_name = intv_var_name[0]
+    cb_data = general_causal_bootstrapping_simu(weight_func_lam = weight_func_lam, 
+                                                dist_map = dist_map, data = data, 
+                                                intv_var_value = {intv_var_name: intv_value}, 
+                                                n_sample = n_sample, kernel = kernel_intv)
+    return cb_data
+
+def frontdoor_simple(cause_data, mediator_data, effect_data, dist_map):
+    """
+    Perform fontdoor causal bootstrapping to de-confound the causal effect using the provided observational data and distribution maps.
+
+    Parameters:
+        cause_data (dict): A dictionary containing the cause variable name as a key and its data array as the value.
+        mediator_data (dict): A dictionary containing the mediator variable name as a key and its data array as the value.
+        effect_data (dict): A dictionary containing the effect variable name as a key and its data array as the value.
+        dist_map (dict): A dictionary mapping tuples of variable combinations to their corresponding distribution functions.
+
+    Returns:
+        dict: A dictionary containing variable names as keys and their corresponding de-confounded data arrays as values.
+    """
+
+    cause_var_name = list(cause_data.keys())[0]
+    effect_var_name = list(effect_data.keys())[0]
+    mediator_var_name = list(mediator_data.keys())[0]
+    
+    data = {cause_var_name+"'": list(cause_data.values())[0]}
+    data.update(effect_data)
+    data.update(mediator_data)
+    
+    causal_graph = cause_var_name + ";" + effect_var_name + ";" + mediator_var_name + "; \n"
+    causal_graph = causal_graph + cause_var_name + "->" + mediator_var_name + "; \n"
+    causal_graph = causal_graph + mediator_var_name + "->" + effect_var_name + "; \n"
+    causal_graph = causal_graph + cause_var_name + "<->" + effect_var_name + "; \n"
+    
+    weight_func_lam, weight_func_str = general_cb_analysis(causal_graph = causal_graph, 
+                                                           effect_var_name = effect_var_name, 
+                                                           cause_var_name = cause_var_name, info_print= False)
+    cb_data = general_causal_bootstrapping_simple(weight_func_lam = weight_func_lam, 
+                                                  dist_map = dist_map, data = data, 
+                                                  intv_var_name = cause_var_name)
+
+    return cb_data
+
+def frontdoor_simu(cause_data, mediator_data, effect_data, dist_map, intv_value, n_sample):
+    """
+    Perform simulational frontdoor causal bootstrapping to de-confound the causal effect using the provided observational data and distribution maps.
+
+    Parameters:
+        cause_data (dict): A dictionary containing the cause variable name as a key and its data array as the value.
+        mediator_data (dict): A dictionary containing the mediator variable name as a key and its data array as the value.
+        effect_data (dict): A dictionary containing the effect variable name as a key and its data array as the value.
+        dist_map (dict): A dictionary mapping tuples of variable combinations to their corresponding distribution functions.
+        intv_value (list): A list containing the interventional value.
+        n_sample (int): The number of samples to be generated through bootstrapping.
+
+    Returns:
+        dict: A dictionary containing variable names as keys and their corresponding de-confounded data arrays as values.
+    """
+    
+    cause_var_name = list(cause_data.keys())[0]
+    effect_var_name = list(effect_data.keys())[0]
+    mediator_var_name = list(mediator_data.keys())[0]
+    
+    data = {cause_var_name+"'": list(cause_data.values())[0]}
+    data.update(effect_data)
+    data.update(mediator_data)
+    
+    causal_graph = cause_var_name + ";" + effect_var_name + ";" + mediator_var_name + "; \n"
+    causal_graph = causal_graph + cause_var_name + "->" + mediator_var_name + "; \n"
+    causal_graph = causal_graph + mediator_var_name + "->" + effect_var_name + "; \n"
+    causal_graph = causal_graph + cause_var_name + "<->" + effect_var_name + "; \n"
+    
+    weight_func_lam, weight_func_str = general_cb_analysis(causal_graph = causal_graph, 
+                                                           effect_var_name = effect_var_name, 
+                                                           cause_var_name = cause_var_name, info_print= False)
+    intv_var_name = cause_var_name
+    cb_data = general_causal_bootstrapping_simu(weight_func_lam = weight_func_lam, 
+                                                dist_map = dist_map, data = data, 
+                                                intv_var_value = {intv_var_name: intv_value}, 
+                                                n_sample = n_sample)
+    return cb_data
