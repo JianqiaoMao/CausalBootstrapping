@@ -1,4 +1,3 @@
-#%%
 import causalBootstrapping as cb
 from distEst_lib import MultivarContiDistributionEstimator
 from grapl import dsl
@@ -11,6 +10,8 @@ def run_all():
     
     test_weight_compute()
     test_bootstrappers()
+    test_general_cb_analysis()
+    test_general_causal_bootstrapping()
     test_backdoor_simple_clas()
     test_backdoor_simu_reg()
     test_frontdoor_simple()
@@ -18,7 +19,6 @@ def run_all():
     
     print("All tests passed!")
     
-
 def test_weight_compute():
     testdata_dir = "../test_data/frontdoor_discY_contZ_contX_discU/"
     n_bins_yu = [0, 0, 0]
@@ -222,9 +222,9 @@ def test_frontdoor_simu():
     
     
     cb_data_simu_intv1 = cb.frontdoor_simu(cause_data = cause_data, mediator_data = mediator_data, effect_data = effect_data,
-                                    dist_map = dist_map, intv_value = [1 for i in range(Y_train.shape[0])], n_sample = n_sample)
+                                           dist_map = dist_map, intv_value = [1 for i in range(Y_train.shape[0])], n_sample = n_sample)
     cb_data_simu_intv2 = cb.frontdoor_simu(cause_data = cause_data, mediator_data = mediator_data, effect_data = effect_data,
-                                        dist_map = dist_map, intv_value = [2 for i in range(Y_train.shape[0])], n_sample = n_sample)
+                                           dist_map = dist_map, intv_value = [2 for i in range(Y_train.shape[0])], n_sample = n_sample)
 
     assert cb_data_simu_intv1["intv_Y"].shape[0] == n_sample
     assert cb_data_simu_intv2["intv_Y"].shape[0] == n_sample
@@ -246,10 +246,60 @@ def test_general_cb_analysis():
     
     assert callable(weight_func_lam)
     assert weight_func_str is not None
-
-#   
-# %%
+    
+def test_general_causal_bootstrapping():
+    testdata_dir = "../test_data/complex_scenario/"
+    causal_graph = '"Complex case"; \
+                    Y; X; U; Z; \
+                    U -> Y; \
+                    Y -> Z; \
+                    U -> Z; \
+                    Z -> X; \
+                    X <-> Y;'
+    n_bins_uyz = [0,0,0,0]
+    n_bins_uy = [0,0]
+    n_sample = 1000
+                    
+    X_train = pd.read_csv(testdata_dir + "X_train.csv")
+    Y_train = pd.read_csv(testdata_dir + "Y_train.csv")
+    Z_train = pd.read_csv(testdata_dir + "Z_train.csv")
+    U_train = pd.read_csv(testdata_dir + "U_train.csv")
+    X_train = np.array(X_train)
+    Y_train = np.array(Y_train)
+    Z_train = np.array(Z_train)
+    U_train = np.array(U_train)
+    data_uyz = np.concatenate((U_train, Y_train, Z_train), axis = 1)
+    data_uy = np.concatenate((U_train, Y_train), axis = 1)
+    data = {"Y'": Y_train,
+            "X": X_train,
+            "Z": Z_train,
+            "U": U_train}
+    
+    dist_estimator_uyz = MultivarContiDistributionEstimator(data_fit=data_uyz, n_bins = n_bins_uyz)
+    pdf_uyz, puyz = dist_estimator_uyz.fit_histogram()
+    dist_estimator_uy = MultivarContiDistributionEstimator(data_fit=data_uy, n_bins = n_bins_uy)
+    pdf_uy, puy = dist_estimator_uy.fit_histogram()
+    dist_map = {tuple(sorted(["U","Y","Z"])): lambda U, Y, Z: pdf_uyz([U, Y, Z]),
+                tuple(sorted(["U","Y'","Z"])): lambda U, Y_prime, Z: pdf_uyz([U, Y_prime, Z]),
+                tuple(sorted(["U","Y'"])): lambda U, Y_prime: pdf_uy([U,Y_prime]),
+                tuple(sorted(["U","Y"])): lambda U, Y: pdf_uy([U, Y])}
+    
+    weight_func_lam, weight_func_str = cb.general_cb_analysis(causal_graph = causal_graph, 
+                                                              effect_var_name = 'X', 
+                                                              cause_var_name = 'Y',
+                                                              info_print = False)
+    
+    cb_data = cb.general_causal_bootstrapping_simple(weight_func_lam = weight_func_lam, 
+                                                     dist_map = dist_map, data = data, 
+                                                     intv_var_name = "Y", kernel = None)
+    
+    N = Y_train.shape[0]
+    cb_data_intv1= cb.general_causal_bootstrapping_simu(weight_func_lam = weight_func_lam, 
+                                                        dist_map = dist_map, data = data, 
+                                                        intv_var_value = {"Y": [1 for i in range(N)]}, 
+                                                        n_sample = n_sample, kernel = lambda Y_prime, Y: 1 if Y_prime == Y else 0)
+    
+    assert cb_data["intv_Y"].shape == Y_train.shape
+    assert cb_data_intv1["intv_Y"].shape == (n_sample, 1)
 
 run_all()  
-
-# %%
