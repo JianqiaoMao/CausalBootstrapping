@@ -33,35 +33,6 @@ def ndgrid_gen(data, n_bins, grid_type='grid'):
     else:
         raise ValueError("Invalid value for 'grid_type', should be 'flatten' or 'grid'.")
 
-        
-class UnivarContiDistributionEstimator:
-    def __init__(self, kernel, data_fit, data_est = None):
-        self.kernel = kernel
-        self.data_fit = data_fit
-        self.data_est = data_fit if data_est is None else data_est
-        self.dist = None
-        self.pdf = None
-        
-    def fit(self, steps):
-        self.params = self.kernel.fit(self.data_fit)
-        self.est_dist = self.kernel(*self.params)
-        self.x_ = np.linspace(np.floor(np.min(self.data_est)), np.ceil(np.max(self.data_est)), steps)
-        self.est_pdf = self.est_dist.pdf(self.x_)
-        
-        return self.est_dist, self.est_pdf
-        
-    def plot(self, title = None):
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.hist(self.data_est)
-        ax.set_ylabel("count")
-        ax2 = ax.twinx()
-        ax2.plot(self.x_, self.est_pdf, c='orange')
-        ax2.set_xlabel("x")
-        ax2.set_ylabel("Prob. Density")
-        plt.title(title)
-
-
 class MultivarContiDistributionEstimator:
     def __init__(self, data_fit, n_bins, data_est = None):
         self.data_fit = data_fit
