@@ -262,36 +262,35 @@ def general_cb_analysis(causal_graph, effect_var_name, cause_var_name, info_prin
             best_id_eqn = id_eqn
             
     weight_func_lam = lambda dist_map, N, kernel: weight_func(best_id_eqn, dist_map, N, kernel)        
+    
+    wanted_dist = []
+    w_nom_str = ""
+    for nom in best_w_nom:
+        joint_var_str = ""
+        for i in range(len(nom)):
+            joint_var_str += nom[i]
+            if i != len(nom)-1:
+                joint_var_str += ","
+        w_nom_str += "P(" + joint_var_str + ")"
+        wanted_dist.append("P(" + joint_var_str + ")")
+    if kernel_flag:
+        kernel_func_str = "K("+list(cause_var)[0]+","+list(cause_var)[0]+"')"
+        w_nom_str += kernel_func_str
+    
+    w_denom_str = ""
+    for denom in best_w_denom:
+        joint_var_str = ""
+        for i in range(len(denom)):
+            joint_var_str += denom[i]
+            if i != len(denom)-1:
+                joint_var_str += ","
+        w_denom_str += "P(" + joint_var_str + ")"
+        wanted_dist.append("P(" + joint_var_str + ")")
+        
+    weight_func_str = "["+w_nom_str+"]"+"/N*[" +w_denom_str + "]"
     # print out interventional probability expression and required distributions
     if info_print:
-        print("Interventional prob.:{}".format(best_id_str))
-        
-        wanted_dist = []
-        w_nom_str = ""
-        for nom in best_w_nom:
-            joint_var_str = ""
-            for i in range(len(nom)):
-                joint_var_str += nom[i]
-                if i != len(nom)-1:
-                    joint_var_str += ","
-            w_nom_str += "P(" + joint_var_str + ")"
-            wanted_dist.append("P(" + joint_var_str + ")")
-        if kernel_flag:
-            kernel_func_str = "K("+list(cause_var)[0]+","+list(cause_var)[0]+"')"
-            w_nom_str += kernel_func_str
-        
-        w_denom_str = ""
-        for denom in best_w_denom:
-            joint_var_str = ""
-            for i in range(len(denom)):
-                joint_var_str += denom[i]
-                if i != len(denom)-1:
-                    joint_var_str += ","
-            w_denom_str += "P(" + joint_var_str + ")"
-            wanted_dist.append("P(" + joint_var_str + ")")
-            
-        weight_func_str = "["+w_nom_str+"]"+"/N*[" +w_denom_str + "]"
-        
+        print("Interventional prob.:{}".format(best_id_str))    
         print("Causal bootstrapping weights function: {}".format(weight_func_str))
         print("Required distributions:")
         i = 0
@@ -300,8 +299,6 @@ def general_cb_analysis(causal_graph, effect_var_name, cause_var_name, info_prin
             print("{}: {}".format(i, dist))
         if kernel_flag:
             print("Kernel function required: {}".format(kernel_func_str))
-    else:
-        weight_func_str = None
     
     return weight_func_lam, weight_func_str
 
