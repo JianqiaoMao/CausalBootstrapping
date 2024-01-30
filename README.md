@@ -103,7 +103,7 @@ data = {"Y'": Y_train,
         "U": U_train}
 ```
 
-5. Estimate the desired distributions (as shown in previous output of `general_cb_analysis()`
+5. Estimate the desired distributions (as shown in previous output of `general_cb_analysis()`). User is also encourged to define the distribution functions if certain domain knowledge has been obtained.
 ```python
 #Set number of the bins for histogram becasue all variables follow discrete distributions.
 n_bins_uyz = [0,0,0,0]
