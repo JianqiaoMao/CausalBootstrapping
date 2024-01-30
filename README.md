@@ -14,7 +14,7 @@ In a backdoor setting, an existing confounder may lead to so-called "selection b
   <img src="https://github.com/JianqiaoMao/CausalBootstrapping/blob/main/Images/demo_graph_backdoor.png" width="500">
 </div>
 
-In the figure, the model trained on confounded dataset (for example, the observational data collected from uncontrolled experiments) is biased due to the existence of the confounder. [Causal Bootstrapping](https://arxiv.org/abs/1910.09648) can aid challenges by adjusting the observational data's distribution, and thus the model is suppose to learn from the data given the generative distribution of $P(X|do(Y))$ instead of $P(X|Y)$.
+In the figure, the model trained on confounded dataset (for example, the observational data collected from uncontrolled experiments) is biased due to the existence of the confounder. [Causal Bootstrapping](https://arxiv.org/abs/1910.09648) can aid challenges by adjusting the observational data's distribution, and thus the model is suppose to learn from the data given the generative distribution of $P(X|do(Y))$ instead of $P(X|Y)$. That is, the model trained on de-confounded dataset by performing backdoor causal bootstrapping shows a proper behavior eliminating the influence imposed by the confounder $U$ as expected (decision boundary closer to the true class boundary).
 
 ### Citing
 
