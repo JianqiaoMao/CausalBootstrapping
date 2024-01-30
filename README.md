@@ -2,9 +2,19 @@
 
 CausalBootstrapping is an easy-access implementation and extention of causal bootstrapping (CB) technique for causal analysis. With certain input of observational data, causal graph and variable distributions, CB resamples the data by adjusting the variable distributions which follow intended causal effects, so an appropriate and unbiased causal effects between the cause variable and effect variable can be captured.
 
+### Confounding
+
+<div style="text-align: center;">
+  <img src="https://github.com/JianqiaoMao/CausalBootstrapping/blob/main/Images/backdoor_graph.png" width="300">
+</div>
+
+In a backdoor setting, an existing confounder may lead to so-called "selection bias". And thus a machine leanring model which is blind to the backend causal relationships between variables is exposed to risks of learning biased and unreliable associations between the predicting target and the features. A simple and intuitive example is as below:
+
 <div style="text-align: center;">
   <img src="https://github.com/JianqiaoMao/CausalBootstrapping/blob/main/Images/demo_graph_backdoor.png" width="500">
 </div>
+
+In the figure, the model trained on confounded dataset (for example, the observational data collected from uncontrolled experiments) is biased due to the existence of the confounder. [Causal Bootstrapping](https://arxiv.org/abs/1910.09648) can aid challenges by adjusting the observational data's distribution, and thus the model is suppose to learn from the data given the generative distribution of $P(X|do(Y))$ instead of $P(X|Y)$.
 
 ### Citing
 
