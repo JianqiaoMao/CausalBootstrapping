@@ -34,13 +34,12 @@ def weight_compute(weight_func, data, intv_var):
                 value_i = value_i.reshape(-1)
             kwargs[key] = value_i
         weights[i] = weight_func(**kwargs)
-        
-    # weights = np.array(weights).T    
     return weights
 
 def weight_func(intv_prob, dist_map, N, kernel = None):
     """
-    Generate the causal bootstrapping weight function using the identified interventional probability and corresponding distribution maps.
+    Generate the causal bootstrapping weight function using the identified interventional probability and 
+    corresponding distribution maps.
 
     Parameters:
         intv_prob (grapl.expr object): The identified interventional probability expression.
@@ -118,9 +117,6 @@ def bootstrapper(data, weights, intv_var_name_in_data, mode = "fast"):
         
     var_names = list(data.keys())
     N = data[var_names[0]].shape[0]
-    #### need thinking
-    # var_names = [item for item in var_names if "'" not in item]
-    # var_names = [item for item in var_names if (item in var_names) and (item not in intv_var_name_in_data)]
     bootstrap_data_keys = var_names + ["intv_"+intv_var_name_in_data[i] for i in range(len(intv_var_name_in_data))]
     bootstrap_data = dict(zip(bootstrap_data_keys, [[] for i in range(len(bootstrap_data_keys))]))
     intv_values = np.array([data[v].reshape(-1) for v in intv_var_name_in_data])
@@ -144,7 +140,8 @@ def bootstrapper(data, weights, intv_var_name_in_data, mode = "fast"):
 
 def simu_bootstrapper(data, weight_func, intv_var_value, n_sample, mode = "fast"):
     """
-    Perform simulational bootstrapping on the input observational data using the provided weight function and designated intervion values.
+    Perform simulational bootstrapping on the input observational data using the provided weight function and 
+    designated intervion values.
 
     Parameters:
         data (dict): A dictionary containing variable names as keys and their corresponding data arrays as values.
@@ -180,7 +177,8 @@ def simu_bootstrapper(data, weight_func, intv_var_value, n_sample, mode = "fast"
 def general_cb_analysis(causal_graph, effect_var_name, cause_var_name, info_print = True):
     
     """
-    Perform pre-analysis for the given causal graph with intended cause(intenventional) and effect variables to formulate the weight function.
+    Perform pre-analysis for the given causal graph with intended cause(intenventional) and effect variables to 
+    formulate the weight function.
 
     This function generates causal bootstrapping weight function and required distributions
     for a given causal graph and a specified intervention.
@@ -302,8 +300,23 @@ def general_cb_analysis(causal_graph, effect_var_name, cause_var_name, info_prin
     
     return weight_func_lam, weight_func_str
 
-def general_causal_bootstrapping_simple(weight_func_lam, dist_map, data, intv_var_name, kernel = None):
-    
+def general_causal_bootstrapping_simple(weight_func_lam, dist_map, data, intv_var_name, kernel = None, mode = "fast"):
+    """
+    Perform causal bootstrapping for a general causal graph if it is identifiable using a specified weight function. 
+    This function is designed to create a bootstrapped dataset based on the specified intervention variables and the 
+    weighting function. The function allows for an optional kernel to be specified.
+
+    Parameters:
+        weight_func_lam (function): A lambda or function that calculates weights. It should take 'dist_map', 'N', and optionally 'kernel' as arguments.
+        dist_map (dict): An object representing a distance map, which is used by 'weight_func_lam' to calculate weights.
+        data (dict): A dictionary containing the dataset. Keys are variable names and values are corresponding data arrays.
+        intv_var_name (str): The name of the intervention variable. This variable should be a key in the 'data' dictionary.
+        kernel (function, optional): An optional kernel function that can be used in weight computation. Default is None.
+        mode (str, optional): A string indicating the bootstrapping mode. It can be either 'fast' or 'robust' depending on the implementation. Default is 'fast'.
+
+    Returns:
+        dict: A dictionary containing variable names as keys and their corresponding bootstrapped data arrays as values.
+    """
     cause_data = [value for key, value in data.items() if intv_var_name in key][0]
     intv_var_name_in_data = [key for key, value in data.items() if intv_var_name in key][0]
     N = cause_data.shape[0]
@@ -316,21 +329,38 @@ def general_causal_bootstrapping_simple(weight_func_lam, dist_map, data, intv_va
     for i, y in enumerate(cause_unique):
         weights[:,i]=weight_compute(weight_func = w_func, data = data ,intv_var = {intv_var_name: [y for i in range(N)]})
         
-    bootstrapped_data = bootstrapper(data = data, weights = weights, intv_var_name_in_data = [intv_var_name_in_data], mode = 'fast')
+    bootstrapped_data = bootstrapper(data = data, weights = weights, intv_var_name_in_data = [intv_var_name_in_data], mode = mode)
     
     return bootstrapped_data
 
-def general_causal_bootstrapping_simu(weight_func_lam, dist_map, data, intv_var_value, n_sample, kernel = None):
-    
+def general_causal_bootstrapping_simu(weight_func_lam, dist_map, data, intv_var_value, n_sample, kernel = None, mode = "fast"):
+    """
+    Perform simulational causal bootstrapping for a general causal graph if it is identifiable using a specified weight function. 
+    This function is designed to create a bootstrapped dataset based on the specified intervention {variable:values} pair and the weighting function.
+    The function allows for an optional kernel to be specified.
+
+    Parameters:
+        weight_func_lam (function): A lambda or function that calculates weights. It should take 'dist_map', 'N', and optionally 'kernel' as arguments.
+        dist_map (dict): An object representing a distance map, which is used by 'weight_func_lam' to calculate weights.
+        data (dict): A dictionary containing the dataset. Keys are variable names and values are corresponding data arrays.
+        intv_var_value (dict): A dictionary containing the intervention variable name as a key and its data array as the value.
+        n_sample (int): The number of samples to be generated through bootstrapping.
+        kernel (function, optional): An optional kernel function that can be used in weight computation. Default is None.
+        mode (str, optional): A string indicating the bootstrapping mode. It can be either 'fast' or 'robust' depending on the implementation. Default is 'fast'.
+
+    Returns:
+        dict: A dictionary containing variable names as keys and their corresponding bootstrapped data arrays as values.
+    """    
     N = list(data.values())[0].shape[0]
     w_func = weight_func_lam(dist_map = dist_map, N = N, kernel = kernel)
-    bootstrapped_data, weights = simu_bootstrapper(data = data, weight_func = w_func, intv_var_value = intv_var_value, n_sample = n_sample, mode = 'fast')
+    bootstrapped_data, weights = simu_bootstrapper(data = data, weight_func = w_func, intv_var_value = intv_var_value, n_sample = n_sample, mode = mode)
     
     return bootstrapped_data
 
 def backdoor_simple(cause_data, effect_data, confounder_data, dist_map, kernel_intv = None):
     """
-    Perform backdoor causal bootstrapping to de-confound the causal effect using the provided observational data and distribution maps.
+    Perform backdoor causal bootstrapping to de-confound the causal effect using the provided observational 
+    data and distribution maps.
 
     Parameters:
         cause_data (dict): A dictionary containing the cause variable name as a key and its data array as the value.
@@ -378,7 +408,8 @@ def backdoor_simple(cause_data, effect_data, confounder_data, dist_map, kernel_i
 
 def backdoor_simu(cause_data, effect_data, confounder_data, dist_map, intv_value, n_sample, kernel_intv = None):
     """
-    Perform simulational backdoor causal bootstrapping to de-confound the causal effect using the provided observational data and distribution maps.
+    Perform simulational backdoor causal bootstrapping to de-confound the causal effect using the provided 
+    observational data and distribution maps.
 
     Parameters:
         cause_data (dict): A dictionary containing the cause variable name as a key and its data array as the value.
@@ -428,7 +459,8 @@ def backdoor_simu(cause_data, effect_data, confounder_data, dist_map, intv_value
 
 def frontdoor_simple(cause_data, mediator_data, effect_data, dist_map):
     """
-    Perform fontdoor causal bootstrapping to de-confound the causal effect using the provided observational data and distribution maps.
+    Perform fontdoor causal bootstrapping to de-confound the causal effect using the provided observational 
+    data and distribution maps.
 
     Parameters:
         cause_data (dict): A dictionary containing the cause variable name as a key and its data array as the value.
@@ -464,7 +496,8 @@ def frontdoor_simple(cause_data, mediator_data, effect_data, dist_map):
 
 def frontdoor_simu(cause_data, mediator_data, effect_data, dist_map, intv_value, n_sample):
     """
-    Perform simulational frontdoor causal bootstrapping to de-confound the causal effect using the provided observational data and distribution maps.
+    Perform simulational frontdoor causal bootstrapping to de-confound the causal effect using the provided 
+    observational data and distribution maps.
 
     Parameters:
         cause_data (dict): A dictionary containing the cause variable name as a key and its data array as the value.
