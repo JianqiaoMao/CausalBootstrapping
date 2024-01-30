@@ -2,6 +2,10 @@
 
 CausalBootstrapping is an easy-access implementation and extention of causal bootstrapping (CB) technique for causal analysis. With certain input of observational data, causal graph and variable distributions, CB resamples the data by adjusting the variable distributions which follow intended causal effects, so an appropriate and unbiased causal effects between the cause variable and effect variable can be captured.
 
+<div style="text-align: center;">
+  <img src="https://github.com/JianqiaoMao/CausalBootstrapping/blob/main/Images/demo_graph_backdoor.png" width="500">
+</div>
+
 ### Citing
 
 Please use one of the following to cite the code of this repository.
