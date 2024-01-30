@@ -38,6 +38,8 @@ import causalBootstrapping as cb
 
 ## Example Demo.
 
+Please refer to [Tutorials](https://github.com/JianqiaoMao/CausalBootstrapping/tree/main/CausalBootstrapping/Tutorials) for more instructions and examples.
+
 1. Import causalBootstrapping lib and other libs for demo.
 ```python
 import causalBootstrapping as cb
