@@ -1,4 +1,37 @@
 # CausalBootstrapping [![DOI](https://sandbox.zenodo.org/badge/715233323.svg)](https://sandbox.zenodo.org/doi/10.5072/zenodo.24049)
+
 CausalBootstrapping is an easy-access implementation and extention of causal bootstrapping (CB) technique for causal analysis. With certain input of observational data, causal graph and variable distributions, CB resamples the data by adjusting the variable distributions which follow intended causal effects..
 
+### Citing
 
+Please use one of the following to cite the code of this repository.
+
+```
+@article{little2019causal,
+  title={Causal bootstrapping},
+  author={Little, Max A and Badawy, Reham},
+  journal={arXiv preprint arXiv:1910.09648},
+  year={2019}
+}
+```
+
+
+## Installation and getting started
+
+We currently offer seamless installation with `pip`. 
+
+Simply:
+```
+pip install CausalBootstrapping
+```
+
+Alternatively, download the current distribution of the package, and run:
+```
+pip install .
+```
+in the root directory of the decompressed package.
+
+To import the package:
+```
+import causalBootstrapping as cb
+```
