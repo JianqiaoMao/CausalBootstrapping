@@ -174,7 +174,7 @@ def simu_bootstrapper(data, weight_func, intv_var_value, n_sample, mode = "fast"
         bootstrap_data["intv_"+intv_var if intv_var in bootstrap_data.keys() else intv_var] = intv_value_i[sample_indices]
     return bootstrap_data, weights
 
-def general_cb_analysis(causal_graph, effect_var_name, cause_var_name, info_print = True):
+def general_cb_analysis(causal_graph, effect_var_name, cause_var_name, info_print = True, idmode = "all", idgreedy = True):
     
     """
     Perform pre-analysis for the given causal graph with intended cause(intenventional) and effect variables to 
@@ -187,6 +187,9 @@ def general_cb_analysis(causal_graph, effect_var_name, cause_var_name, info_prin
     - causal_graph (grapl.admg.ADMG object): A causal graph representing the relationships between variables.
     - effect_var_name (str): The name of the effect variable for the causal intervention.
     - cause_var_name (str): The name of the cause variable responsible for the intervention.
+    - info_print（bool, optional): A boolean indicating whether to print the weight function and required distributions. Default is True.
+    - idmode (str, optional): A string indicating the mode for identifying the interventional probability. It can be either 'all', 'shortest', 'mostmrg' or 'random'. Default is 'all'.
+    - idgreedy (bool, optional): A boolean indicating whether to use the greedy strategy for identifying the interventional probability. Default is True.
 
     Returns:
     - weight_func_lam (function): A lambda function to calculate causal bootstrapping weights.
@@ -204,12 +207,17 @@ def general_cb_analysis(causal_graph, effect_var_name, cause_var_name, info_prin
     
     grapl_obj = dsl.GraplDSL()
     G = grapl_obj.readgrapl(causal_graph)
-    id_str_all, id_eqn_all, identifiable = algs.idfixall(G, set(cause_var_name), set(effect_var_name), mode = "all")
+    id_str_all, id_eqn_all, identifiable = algs.idfixall(G, set(cause_var_name), set(effect_var_name), 
+                                                         mode = idmode, greedy = idgreedy)
 
     if not identifiable:
         print("Not identifiable")
         return None, None
 
+    if idmode != "all":
+        id_str_all = [id_str_all]
+        id_eqn_all = [id_eqn_all]
+        
     simplicity_score = 0
     best_simp_score = 0
     
@@ -258,7 +266,7 @@ def general_cb_analysis(causal_graph, effect_var_name, cause_var_name, info_prin
             best_w_denom = w_denom
             best_id_str = id_str_all[i]
             best_id_eqn = id_eqn
-            
+    
     weight_func_lam = lambda dist_map, N, kernel: weight_func(best_id_eqn, dist_map, N, kernel)        
     
     wanted_dist = []
