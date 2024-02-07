@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='CausalBootstrapping',
-    version='0.1.1',
+    version='0.1.2',
     author='Jianqiao Mao',
     author_email='jxm1417@student.bham.ac.uk',
     license='GPL-3.0',

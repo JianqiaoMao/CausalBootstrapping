@@ -113,7 +113,8 @@ def bootstrapper(data, weights, intv_var_name_in_data, mode = "fast"):
     """
     
     if mode == "robust":
-         weights = np.log(weights+np.e)
+        norm_weights = weights/np.sum(weights)
+        weights = np.where(norm_weights > 0, -1/np.log(norm_weights), 0)
         
     var_names = list(data.keys())
     N = data[var_names[0]].shape[0]
@@ -156,7 +157,8 @@ def simu_bootstrapper(data, weight_func, intv_var_value, n_sample, mode = "fast"
     
     weights = weight_compute(weight_func, data, intv_var_value)
     if mode == "robust":
-         weights = np.log(weights+np.e)
+        norm_weights = weights/np.sum(weights)
+        weights = np.where(norm_weights > 0, -1/np.log(norm_weights), 0)
          
     intv_var_name = list(intv_var_value.keys())
     var_names = list(data.keys())
@@ -365,7 +367,7 @@ def general_causal_bootstrapping_simu(weight_func_lam, dist_map, data, intv_var_
     
     return bootstrapped_data
 
-def backdoor_simple(cause_data, effect_data, confounder_data, dist_map, kernel_intv = None):
+def backdoor_simple(cause_data, effect_data, confounder_data, dist_map, kernel_intv = None, mode = "fast"):
     """
     Perform backdoor causal bootstrapping to de-confound the causal effect using the provided observational 
     data and distribution maps.
@@ -376,7 +378,8 @@ def backdoor_simple(cause_data, effect_data, confounder_data, dist_map, kernel_i
         confounder_data (dict): A dictionary containing the confounder variable name as a key and its data array as the value.
         dist_map (dict): A dictionary mapping tuples of variable combinations to their corresponding distribution functions.
         kernel_intv (function, optional): The kernel function to be used in the backdoor bootstrapping for the cause variable. Defaults to None.
-
+        mode (str, optional): A string indicating the bootstrapping mode. It can be either 'fast' or 'robust' depending on the implementation. Default is 'fast'.
+        
     Returns:
         dict: A dictionary containing variable names as keys and their corresponding de-confounded data arrays as values.
     """
@@ -410,11 +413,12 @@ def backdoor_simple(cause_data, effect_data, confounder_data, dist_map, kernel_i
             intv_var_name = intv_var_name[0]
     cb_data = general_causal_bootstrapping_simple(weight_func_lam = weight_func_lam, 
                                                   dist_map = dist_map, data = data, 
-                                                  intv_var_name = cause_var_name, kernel = kernel_intv)
+                                                  intv_var_name = cause_var_name, 
+                                                  kernel = kernel_intv, mode = mode)
 
     return cb_data
 
-def backdoor_simu(cause_data, effect_data, confounder_data, dist_map, intv_value, n_sample, kernel_intv = None):
+def backdoor_simu(cause_data, effect_data, confounder_data, dist_map, intv_value, n_sample, kernel_intv = None, mode = "fast"):
     """
     Perform simulational backdoor causal bootstrapping to de-confound the causal effect using the provided 
     observational data and distribution maps.
@@ -427,7 +431,8 @@ def backdoor_simu(cause_data, effect_data, confounder_data, dist_map, intv_value
         intv_value (list): A list containing the interventional value.
         n_sample (int): The number of samples to be generated through bootstrapping.
         kernel_intv (function, optional): The kernel function to be used in the backdoor adjustment for the cause variable. Defaults to None.
-
+        mode (str, optional): A string indicating the bootstrapping mode. It can be either 'fast' or 'robust' depending on the implementation. Default is 'fast'.
+        
     Returns:
         dict: A dictionary containing variable names as keys and their corresponding de-confounded data arrays as values.
     """
@@ -462,10 +467,10 @@ def backdoor_simu(cause_data, effect_data, confounder_data, dist_map, intv_value
     cb_data = general_causal_bootstrapping_simu(weight_func_lam = weight_func_lam, 
                                                 dist_map = dist_map, data = data, 
                                                 intv_var_value = {intv_var_name: intv_value}, 
-                                                n_sample = n_sample, kernel = kernel_intv)
+                                                n_sample = n_sample, kernel = kernel_intv, mode = mode)
     return cb_data
 
-def frontdoor_simple(cause_data, mediator_data, effect_data, dist_map):
+def frontdoor_simple(cause_data, mediator_data, effect_data, dist_map, mode = "fast"):
     """
     Perform fontdoor causal bootstrapping to de-confound the causal effect using the provided observational 
     data and distribution maps.
@@ -475,6 +480,7 @@ def frontdoor_simple(cause_data, mediator_data, effect_data, dist_map):
         mediator_data (dict): A dictionary containing the mediator variable name as a key and its data array as the value.
         effect_data (dict): A dictionary containing the effect variable name as a key and its data array as the value.
         dist_map (dict): A dictionary mapping tuples of variable combinations to their corresponding distribution functions.
+        mode (str, optional): A string indicating the bootstrapping mode. It can be either 'fast' or 'robust' depending on the implementation. Default is 'fast'.
 
     Returns:
         dict: A dictionary containing variable names as keys and their corresponding de-confounded data arrays as values.
@@ -498,11 +504,11 @@ def frontdoor_simple(cause_data, mediator_data, effect_data, dist_map):
                                                            cause_var_name = cause_var_name, info_print= False)
     cb_data = general_causal_bootstrapping_simple(weight_func_lam = weight_func_lam, 
                                                   dist_map = dist_map, data = data, 
-                                                  intv_var_name = cause_var_name)
+                                                  intv_var_name = cause_var_name, mode = mode)
 
     return cb_data
 
-def frontdoor_simu(cause_data, mediator_data, effect_data, dist_map, intv_value, n_sample):
+def frontdoor_simu(cause_data, mediator_data, effect_data, dist_map, intv_value, n_sample, mode = "fast"):
     """
     Perform simulational frontdoor causal bootstrapping to de-confound the causal effect using the provided 
     observational data and distribution maps.
@@ -514,6 +520,7 @@ def frontdoor_simu(cause_data, mediator_data, effect_data, dist_map, intv_value,
         dist_map (dict): A dictionary mapping tuples of variable combinations to their corresponding distribution functions.
         intv_value (list): A list containing the interventional value.
         n_sample (int): The number of samples to be generated through bootstrapping.
+        mode (str, optional): A string indicating the bootstrapping mode. It can be either 'fast' or 'robust' depending on the implementation. Default is 'fast'.
 
     Returns:
         dict: A dictionary containing variable names as keys and their corresponding de-confounded data arrays as values.
@@ -539,5 +546,5 @@ def frontdoor_simu(cause_data, mediator_data, effect_data, dist_map, intv_value,
     cb_data = general_causal_bootstrapping_simu(weight_func_lam = weight_func_lam, 
                                                 dist_map = dist_map, data = data, 
                                                 intv_var_value = {intv_var_name: intv_value}, 
-                                                n_sample = n_sample)
+                                                n_sample = n_sample, mode = mode)
     return cb_data
