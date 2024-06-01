@@ -133,10 +133,10 @@ pdf_uy, puy = dist_estimator_uy.fit_histogram()
 
 6. Construct the distribution mapping dict
 ```python
-dist_map = {tuple(sorted(["U","Y","Z"])): lambda U, Y, Z: pdf_uyz([U, Y, Z]),
-            tuple(sorted(["U","Y'","Z"])): lambda U, Y_prime, Z: pdf_uyz([U, Y_prime, Z]),
-            tuple(sorted(["U","Y'"])): lambda U, Y_prime: pdf_uy([U,Y_prime]),
-            tuple(sorted(["U","Y"])): lambda U, Y: pdf_uy([U, Y])}
+dist_map = {"U,Y,Z": lambda U, Y, Z: pdf_uyz([U, Y, Z]),
+            "U,Y',Z": lambda U, Y_prime, Z: pdf_uyz([U, Y_prime, Z]),
+            "U,Y'": lambda U, Y_prime: pdf_uy([U,Y_prime]),
+            "U,Y": lambda U, Y: pdf_uy([U, Y])}
 ```
 
 7. bootstrap the dataset given the weight function expression
