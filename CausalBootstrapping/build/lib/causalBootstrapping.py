@@ -51,6 +51,13 @@ def weight_func(intv_prob, dist_map, N, kernel = None):
         function: The corresponding causal bootstrapping weight function.
     """
     
+    dist_map_sep = ","
+    dist_map_sorted = {}
+    
+    for key ,value in dist_map.items():
+        sorted_key = dist_map_sep.join(sorted(key.split(","))).replace(" ","")
+        dist_map_sorted[sorted_key] = value
+    
     def divide_functions(*funcs):
         def division(**kwargs):
             param_names = inspect.signature(funcs[0]).parameters
@@ -85,18 +92,31 @@ def weight_func(intv_prob, dist_map, N, kernel = None):
     if pa_var in w_nom:
         w_nom.remove(pa_var)
         cause_kernel_flag = True
-        funcs = [dist_map[tuple(w_nom_i)] for w_nom_i in w_nom] + [dist_map[tuple(w_denom_i)] for w_denom_i in w_denom] + [kernel]
+        funcs = [dist_map_sorted[",".join(w_nom_i)] for w_nom_i in w_nom] + [dist_map_sorted[",".join(w_denom_i)] for w_denom_i in w_denom] + [kernel]
     else:
         pa_var = set(pa_var)
         pa_var -= cause_var
-        pa_var = sorted(list(pa_var))
+        pa_var = sorted(pa_var)
         w_nom.remove(list(pa_var))
         cause_kernel_flag = False
-        funcs = [dist_map[tuple(w_nom_i)] for w_nom_i in w_nom] + [dist_map[tuple(w_denom_i)] for w_denom_i in w_denom]
+        funcs = [dist_map_sorted[",".join(w_nom_i)] for w_nom_i in w_nom] + [dist_map_sorted[",".join(w_denom_i)] for w_denom_i in w_denom]
     
     weight_func = divide_functions(*funcs)
 
     return weight_func
+
+def gumbel_max(weights):
+    """
+    Apply the Gumbel-max trick to sample indices based on the provided weights.
+    
+    Parameters:
+        weights (numpy.ndarray): The weights for sampling.
+    
+    Returns:
+        int: The index of the sampled weight.
+    """
+    gumbel_noise = -np.log(-np.log(np.random.rand(*weights.shape)))
+    return np.argmax(np.log(weights) + gumbel_noise)
 
 def bootstrapper(data, weights, intv_var_name_in_data, mode = "fast"):
     """
@@ -112,10 +132,6 @@ def bootstrapper(data, weights, intv_var_name_in_data, mode = "fast"):
         dict: A dictionary containing variable names as keys and their corresponding bootstrapped data arrays as values.
     """
     
-    if mode == "robust":
-        norm_weights = weights/np.sum(weights)
-        weights = np.where(norm_weights > 0, -1/np.log(norm_weights), 0)
-        
     var_names = list(data.keys())
     N = data[var_names[0]].shape[0]
     bootstrap_data_keys = var_names + ["intv_"+intv_var_name_in_data[i] for i in range(len(intv_var_name_in_data))]
@@ -126,7 +142,14 @@ def bootstrapper(data, weights, intv_var_name_in_data, mode = "fast"):
     for i, v in enumerate(intv_values_combined):
         weight_intv = weights[:, i]
         n_sample = np.where(np.all(intv_values[:len(v), :].T == np.array(v), axis=1))[0].shape[0]
-        sample_indices = random.choices([n for n in range(N)], weights = weight_intv, k = n_sample)
+        # sample_indices = random.choices([n for n in range(N)], weights = weight_intv, k = n_sample)
+        
+        if mode == "fast":
+            sample_indices = random.choices(range(N), weights=weight_intv, k=n_sample)
+        elif mode == "robust":
+            sample_indices = [gumbel_max(weight_intv) for _ in range(n_sample)]
+        else:
+            raise ValueError("Invalid mode. Choose either 'fast' or 'robust'.")
         
         for var in var_names:
             bootstrap_data[var].append(data[var][sample_indices])
@@ -156,16 +179,19 @@ def simu_bootstrapper(data, weight_func, intv_var_value, n_sample, mode = "fast"
     """
     
     weights = weight_compute(weight_func, data, intv_var_value)
-    if mode == "robust":
-        norm_weights = weights/np.sum(weights)
-        weights = np.where(norm_weights > 0, -1/np.log(norm_weights), 0)
-         
+    
     intv_var_name = list(intv_var_value.keys())
     var_names = list(data.keys())
     N = data[var_names[0]].shape[0]
     # var_names = [item for item in var_names if (item in var_names) and (item.replace("'","") not in intv_var_name)]
     bootstrap_data = {}
-    sample_indices = random.choices([n for n in range(N)], weights = weights, k = n_sample)
+    # sample_indices = random.choices([n for n in range(N)], weights = weights, k = n_sample)
+    if mode == "fast":
+        sample_indices = random.choices(range(N), weights=weights, k=n_sample)
+    elif mode == "robust":
+        sample_indices = [gumbel_max(weights) for _ in range(n_sample)]
+    else:
+        raise ValueError("Invalid mode. Choose either 'fast' or 'robust'.")
     
     for var in var_names:
         bootstrap_data[var.replace("'","")] = data[var][sample_indices]

@@ -42,8 +42,8 @@ def test_weight_compute():
     dist_estimator_u = MultivarContiDistributionEstimator(data_fit=U_train, n_bins = n_bins_u)
     pdf_u, pu = dist_estimator_u.fit_histogram()
 
-    dist_map = {tuple(sorted(['Y', 'U'])): lambda Y, U: pdf_yu([Y,U]),
-                tuple(['U']): lambda U: pdf_u(U)}
+    dist_map = {"Y,U": lambda Y, U: pdf_yu([Y,U]),
+                "U": lambda U: pdf_u(U)}
 
     causal_graph = '"back-door test example"; \
                  Y; X; U; \
@@ -105,8 +105,8 @@ def test_backdoor_simple_clas():
     dist_estimator_u = MultivarContiDistributionEstimator(data_fit=U_train, n_bins = n_bins_u)
     pdf_u, pu = dist_estimator_u.fit_histogram()
 
-    dist_map = {tuple(sorted(['Y', 'U'])): lambda Y, U: pdf_yu([Y,U]),
-                tuple(['U']): lambda U: pdf_u(U)}
+    dist_map = {"Y, U": lambda Y, U: pdf_yu([Y,U]),
+                "U": lambda U: pdf_u(U)}
     
     cause_data = {"Y": Y_train}
     effect_data = {"X": X_train}
@@ -140,8 +140,8 @@ def test_backdoor_simu_reg():
     dist_estimator_u = MultivarContiDistributionEstimator(data_fit=U_train, n_bins = n_bins_u)
     pdf_u, pu = dist_estimator_u.fit_histogram()
     
-    dist_map = {tuple(sorted(['Y', 'U'])): lambda Y, U: pdf_yu([Y,U]),
-                tuple(['U']): lambda U: pdf_u(U)}
+    dist_map = {"Y,U": lambda Y, U: pdf_yu([Y,U]),
+                "U": lambda U: pdf_u(U)}
     
     cause_data = {"Y": Y_train}
     effect_data = {"X": X_train}
@@ -185,10 +185,10 @@ def test_frontdoor_simple():
     cause_data = {"Y": Y_train}
     mediator_data = {"Z": Z_train}
     effect_data = {"X": X_train}
-    dist_map = {tuple(sorted(["Y", "Z"])): lambda Y, Z: pdf_yz([Y,Z]),
-                tuple(sorted(["Y'", "Z"])): lambda Y_prime, Z: pdf_yz([Y_prime,Z]),
-                tuple(["Y"]): lambda Y: pdf_y(Y),
-                tuple(["Y'"]): lambda Y_prime: pdf_y(Y_prime)}
+    dist_map = {"Y,Z": lambda Y, Z: pdf_yz([Y,Z]),
+                "Y',Z": lambda Y_prime, Z: pdf_yz([Y_prime,Z]),
+                "Y": lambda Y: pdf_y(Y),
+                "Y'": lambda Y_prime: pdf_y(Y_prime)}
     cb_data = cb.frontdoor_simple(cause_data, mediator_data, effect_data, dist_map)
     
     assert cb_data["intv_Y"].shape == Y_train.shape
@@ -215,10 +215,10 @@ def test_frontdoor_simu():
     cause_data = {"Y": Y_train}
     mediator_data = {"Z": Z_train}
     effect_data = {"X": X_train}
-    dist_map = {tuple(sorted(["Y", "Z"])): lambda Y, Z: pdf_yz([Y,Z]),
-                tuple(sorted(["Y'", "Z"])): lambda Y_prime, Z: pdf_yz([Y_prime,Z]),
-                tuple(["Y"]): lambda Y: pdf_y(Y),
-                tuple(["Y'"]): lambda Y_prime: pdf_y(Y_prime)}
+    dist_map = {"Y,Z": lambda Y, Z: pdf_yz([Y,Z]),
+                "Y',Z": lambda Y_prime, Z: pdf_yz([Y_prime,Z]),
+                "Y": lambda Y: pdf_y(Y),
+                "Y'": lambda Y_prime: pdf_y(Y_prime)}
     
     
     cb_data_simu_intv1 = cb.frontdoor_simu(cause_data = cause_data, mediator_data = mediator_data, effect_data = effect_data,
@@ -279,10 +279,10 @@ def test_general_causal_bootstrapping():
     pdf_uyz, puyz = dist_estimator_uyz.fit_histogram()
     dist_estimator_uy = MultivarContiDistributionEstimator(data_fit=data_uy, n_bins = n_bins_uy)
     pdf_uy, puy = dist_estimator_uy.fit_histogram()
-    dist_map = {tuple(sorted(["U","Y","Z"])): lambda U, Y, Z: pdf_uyz([U, Y, Z]),
-                tuple(sorted(["U","Y'","Z"])): lambda U, Y_prime, Z: pdf_uyz([U, Y_prime, Z]),
-                tuple(sorted(["U","Y'"])): lambda U, Y_prime: pdf_uy([U,Y_prime]),
-                tuple(sorted(["U","Y"])): lambda U, Y: pdf_uy([U, Y])}
+    dist_map = {"U,Y,Z": lambda U, Y, Z: pdf_uyz([U, Y, Z]),
+                "U,Y',Z": lambda U, Y_prime, Z: pdf_uyz([U, Y_prime, Z]),
+                "U,Y'": lambda U, Y_prime: pdf_uy([U,Y_prime]),
+                "U,Y": lambda U, Y: pdf_uy([U, Y])}
     
     weight_func_lam, weight_func_str = cb.general_cb_analysis(causal_graph = causal_graph, 
                                                               effect_var_name = 'X', 
