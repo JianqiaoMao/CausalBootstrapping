@@ -34,8 +34,10 @@ def ndgrid_gen(data, n_bins, grid_type='grid'):
         raise ValueError("Invalid value for 'grid_type', should be 'flatten' or 'grid'.")
 
 class MultivarContiDistributionEstimator:
-    def __init__(self, data_fit, n_bins, data_est = None):
+    def __init__(self, data_fit, n_bins = None, data_est = None):
         self.data_fit = data_fit
+        if n_bins is None:
+            n_bins = [20]*data_fit.shape[1]
         self.n_bins = [len(set(data_fit[:,i])) if n_bins[i]==0 else n_bins[i] for i in range(data_fit.shape[1])]
         self.data_est = data_fit if data_est is None else data_est
         self.est_dist = None
@@ -52,7 +54,7 @@ class MultivarContiDistributionEstimator:
         self.est_dist = est_dist
         self.est_pdf = est_pdf
         
-        return self.est_dist, self.est_pdf
+        return self.est_dist.pdf, self.est_pdf
     
     def fit_kmeans(self, k, data_est = None):
         centroids, labels = kmeans2(self.data_fit, k)
@@ -99,6 +101,7 @@ class MultivarContiDistributionEstimator:
         self.pos = ndgrid_gen(self.data_est, self.n_bins)
         
         def est_dist(x):
+            x = np.array(x).reshape(-1)
             if len(x) > 1:
                 try:
                     x = np.concatenate(x)
