@@ -93,15 +93,32 @@ class MultivarContiDistributionEstimator:
         self.est_pdf = est_pdf/np.sum(est_pdf)
         self.pos = ndgrid_gen(self.data_est, self.n_bins)
         
-        return self.est_dist, self.est_pdf
-    
+        def est_dist(x):
+            if not isinstance(x, list):
+                x = [x]
+            x = [x_i.reshape(-1) if isinstance(x_i, np.ndarray) else np.array(x_i).reshape(-1) for x_i in x]
+            # x = np.array(x).reshape(-1)
+            if len(x) > 1:
+                try:
+                    x = np.concatenate(x)
+                except:
+                    x = x.reshape(-1)
+            else:
+                x = np.array(x).reshape(-1,1)
+            return self.est_dist(x)
+        
+        return est_dist, self.est_pdf
+
     def fit_histogram(self, data_est = None):
         hist, edges = np.histogramdd(sample = self.data_fit, bins=self.n_bins, density=False)
         self.est_pdf = hist/np.sum(hist)
         self.pos = ndgrid_gen(self.data_est, self.n_bins)
         
         def est_dist(x):
-            x = np.array(x).reshape(-1)
+            if not isinstance(x, list):
+                x = [x]
+            x = [x_i.reshape(-1) if isinstance(x_i, np.ndarray) else np.array(x_i).reshape(-1) for x_i in x]
+            # x = np.array(x).reshape(-1)
             if len(x) > 1:
                 try:
                     x = np.concatenate(x)

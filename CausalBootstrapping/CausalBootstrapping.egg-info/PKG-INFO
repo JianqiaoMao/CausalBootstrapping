@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: CausalBootstrapping
-Version: 0.1.4
+Version: 0.1.5
 Summary: CausalBootstrapping is an easy-access implementation and extension of causal bootstrapping (CB) technique for causal analysis. With certain input of observational data, causal graph and variable distributions, CB resamples the data by adjusting the variable distributions which follow intended causal effects.
 Home-page: https://github.com/JianqiaoMao/CausalBootstrapping
 Author: Jianqiao Mao
@@ -9,3 +9,4 @@ License: GPL-3.0
 Requires-Dist: numpy
 Requires-Dist: grapl-causal
 Requires-Dist: scipy
+Requires-Dist: graphviz
