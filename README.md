@@ -56,8 +56,8 @@ Please refer to [Tutorials](https://github.com/JianqiaoMao/CausalBootstrapping/t
 
 1. Import causalBootstrapping lib and other libs for demo.
 ```python
-import causalBootstrapping as cb
-from distEst_lib import MultivarContiDistributionEstimator
+from causalbootstrapping import workflows
+from causalbootstrapping.distEst_lib import MultivarContiDistributionEstimator
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -81,10 +81,10 @@ The above causal graph is equivalent to:
 
 3. Analyse the causal graph and output the weights function expression and required distributions
 ```python
-weight_func_lam, weight_func_str = cb.general_cb_analysis(causal_graph = causal_graph, 
-                                                          effect_var_name = 'X', 
-                                                          cause_var_name = 'Y',
-                                                          info_print = True)
+weight_func_lam, weight_func_str = workflows.general_cb_analysis(causal_graph = causal_graph, 
+                                                                 effect_var_name = 'X', 
+                                                                 cause_var_name = 'Y',
+                                                                 info_print = True)
 ```
 
 This code is expected to output as below:
@@ -102,15 +102,10 @@ Required distributions:
 ```python
 # Read demo data
 testdata_dir = "../test_data/complex_scenario/"
-X_train = pd.read_csv(testdata_dir + "X_train.csv")
-Y_train = pd.read_csv(testdata_dir + "Y_train.csv")
-Z_train = pd.read_csv(testdata_dir + "Z_train.csv")
-U_train = pd.read_csv(testdata_dir + "U_train.csv")
-# Reform the data to the acceptable format for the causalbootstrapping interfaces
-X_train = np.array(X_train)
-Y_train = np.array(Y_train)
-Z_train = np.array(Z_train)
-U_train = np.array(U_train)
+X_train = pd.read_csv(testdata_dir + "X_train.csv").values
+Y_train = pd.read_csv(testdata_dir + "Y_train.csv").values
+Z_train = pd.read_csv(testdata_dir + "Z_train.csv").values
+U_train = pd.read_csv(testdata_dir + "U_train.csv").values
 data = {"Y'": Y_train,
         "X": X_train,
         "Z": Z_train,
@@ -125,25 +120,28 @@ n_bins_uy = [0,0]
 data_uyz = np.concatenate((U_train, Y_train, Z_train), axis = 1)
 data_uy = np.concatenate((U_train, Y_train), axis = 1)
 
-dist_estimator_uyz = MultivarContiDistributionEstimator(data_fit=data_uyz, n_bins = n_bins_uyz)
-pdf_uyz, puyz = dist_estimator_uyz.fit_histogram()
-dist_estimator_uy = MultivarContiDistributionEstimator(data_fit=data_uy, n_bins = n_bins_uy)
-pdf_uy, puy = dist_estimator_uy.fit_histogram()
+dist_estimator_uyz = MultivarContiDistributionEstimator(data_fit=data_uyz)
+pdf_uyz = dist_estimator_uyz.fit_histogram(n_bins = n_bins_uyz)
+dist_estimator_uy = MultivarContiDistributionEstimator(data_fit=data_uy)
+pdf_uy = dist_estimator_uy.fit_histogram(n_bins = n_bins_uy)
 ```
 
 6. Construct the distribution mapping dict
 ```python
-dist_map = {tuple(sorted(["U","Y","Z"])): lambda U, Y, Z: pdf_uyz([U, Y, Z]),
-            tuple(sorted(["U","Y'","Z"])): lambda U, Y_prime, Z: pdf_uyz([U, Y_prime, Z]),
-            tuple(sorted(["U","Y'"])): lambda U, Y_prime: pdf_uy([U,Y_prime]),
-            tuple(sorted(["U","Y"])): lambda U, Y: pdf_uy([U, Y])}
+dist_map = {"U,intv_Y,Z": lambda U, intv_Y, Z: pdf_uyz([U, intv_Y, Z]),
+            "U,Y',Z": lambda U, Y_prime, Z: pdf_uyz([U, Y_prime, Z]),
+            "U,Y'": lambda U, Y_prime: pdf_uy([U,Y_prime]),
+            "U,intv_Y": lambda U, intv_Y: pdf_uy([U, intv_Y])}
 ```
 
 7. bootstrap the dataset given the weight function expression
 ```python
-cb_data = cb.general_causal_bootstrapping_simple(weight_func_lam = weight_func_lam, 
-                                                 dist_map = dist_map, data = data, 
-                                                 intv_var_name = "Y", kernel = None)
+cb_data = workflows.general_causal_bootstrapping_simple(weight_func_lam = weight_func_lam, 
+                                                        dist_map = dist_map, 
+                                                        data = data, 
+                                                        intv_var_name_in_data = "Y'",
+                                                        cause_intv_name_map = {"Y": "intv_Y"}, 
+                                                        kernel = None)
 ```
 
 8. Train two linear support vector machines using confounded and de-confounded datasets
