@@ -1,0 +1,11 @@
+include README* readme.*
+include LICENSE*
+recursive-exclude tests *
+recursive-exclude test *
+recursive-exclude docs *
+recursive-exclude examples *
+recursive-exclude Tutorials *
+global-exclude *.ipynb
+global-exclude __pycache__
+global-exclude *.py[cod]
+global-exclude .DS_Store

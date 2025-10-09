@@ -1,8 +1,0 @@
-causalBootstrapping.py
-distEst_lib.py
-setup.py
-CausalBootstrapping.egg-info/PKG-INFO
-CausalBootstrapping.egg-info/SOURCES.txt
-CausalBootstrapping.egg-info/dependency_links.txt
-CausalBootstrapping.egg-info/requires.txt
-CausalBootstrapping.egg-info/top_level.txt
