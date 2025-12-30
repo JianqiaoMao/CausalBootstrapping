@@ -5,6 +5,7 @@ import grapl.eqn as eqn
 import grapl.expr as expr
 import numpy as np
 import inspect
+import warnings
 from causalbootstrapping.cb_type_defs import (
     DataDict,
     IntvDict,
@@ -177,6 +178,10 @@ def weight_compute(
         intv_dict_expand[intv_var] = np.array([intv_dict[intv_var] for i in range(N)]).reshape(N, len(intv_dict[intv_var]))
     data_for_weight_compute = {**data, **intv_dict_expand}
     weights = w_func(**data_for_weight_compute).reshape(-1)
+    if np.any(np.isnan(weights)):
+        number_nan = np.sum(np.isnan(weights))
+        warnings.warn(f"{number_nan} NaN values found in weights. Replacing NaNs with the minimum non-NaN weight.")
+    weights[np.isnan(weights)] = weights[~np.isnan(weights)].min()
     return weights
 
 def build_weight_function(
