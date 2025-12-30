@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "causalbootstrapping"
-version = "0.2.0"
+version = "0.2.1"
 description = "CausalBootstrapping is an easy-access implementation and extention of causal bootstrapping (CB) technique for causal analysis. With certain input of observational data, causal graph and variable distributions, CB resamples the data by adjusting the variable distributions which follow intended causal effects."
 requires-python = ">=3.9"
 readme = { file = "README.md", content-type = "text/markdown" }

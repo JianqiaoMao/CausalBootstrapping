@@ -1,6 +1,7 @@
 
 from causalbootstrapping.backend import *
-from causalbootstrapping.expr import Expr
+from causalbootstrapping.expr_extend import weightExpr
+from causalbootstrapping.utils import weight_func_parse
 import grapl.algorithms as algs
 import grapl.dsl as dsl
 import numpy as np
@@ -19,10 +20,8 @@ def general_cb_analysis(
     causal_graph: str, 
     effect_var_name: str, 
     cause_var_name: str, 
-    info_print: bool = True, 
-    idmode: str = "all", 
-    idgreedy: bool = True
-) -> Tuple[WeightBuilder, Expr]:
+    info_print: bool = True
+) -> Tuple[WeightBuilder, weightExpr]:
 
     """
     Perform pre-analysis for the given causal graph with intended cause(intenventional) and effect variables to 
@@ -36,8 +35,6 @@ def general_cb_analysis(
     - effect_var_name (str): The name of the effect variable for the causal intervention.
     - cause_var_name (str): The name of the cause variable responsible for the intervention.
     - info_print (bool, optional): A boolean indicating whether to print the weight function and required distributions. Default is True.
-    - idmode (str, optional): A string indicating the mode for identifying the interventional probability. It can be either 'all', 'shortest', 'mostmrg' or 'random'. Default is 'all'.
-    - idgreedy (bool, optional): A boolean indicating whether to use the greedy strategy for identifying the interventional probability. Default is True.
 
     Returns:
     - weight_func_lam (function): A lambda function to calculate causal bootstrapping weights.
@@ -55,93 +52,41 @@ def general_cb_analysis(
     
     grapl_obj = dsl.GraplDSL()
     G = grapl_obj.readgrapl(causal_graph)
-    id_str_all, id_eqn_all, identifiable = algs.idfixall(G = G,
-                                                         X = set(cause_var_name), 
-                                                         Y = set(effect_var_name), 
-                                                         mode = idmode, 
-                                                         greedy = idgreedy)
+    id_formular, identifiable = id(Y = set(effect_var_name),
+                                  X = set(cause_var_name),
+                                  G = G)
 
     if not identifiable:
         print("Not identifiable")
         return None, None
-
-    if idmode != "all":
-        id_str_all = [id_str_all]
-        id_eqn_all = [id_eqn_all]
-        
-    simplicity_score = 0
-    best_simp_score = 0
     
-    cause_var = id_eqn_all[0].lhs.dov
-    eff_var = id_eqn_all[0].lhs.num[0]
+    cause_var = id_formular.lhs.dov
+    eff_var = id_formular.lhs.num[0]
     
-    valid_eqn_flag = False
-    for i,id_eqn in enumerate(id_eqn_all):
-        
-        w_denom = id_eqn.rhs.den.copy()
-        w_nom = id_eqn.rhs.num.copy()
-        
-        eff_var_cnt_nom = len([0 for w_nom_i in w_nom if eff_var.issubset(w_nom_i)])
-        eff_var_cnt_denom = len([0 for w_denom_i in w_denom if eff_var.issubset(w_denom_i)])
-        eff_var_cnt = eff_var_cnt_nom + eff_var_cnt_denom
-        
-        # Check if only one effect variable in the expression
-        valid_cond1 = eff_var_cnt<=1
-        # Check if interventional variable in the expression
-        valid_cond2 = (any(cause_var.issubset(w_nom_i) for w_nom_i in w_nom) or any(cause_var.issubset(w_denom_i) for w_denom_i in w_denom))
-        # Check if Pa(effect_var) or Pa(effect_var)\cause_var is in the nominator
-        epsilo = id_eqn.rhs.mrg
-        YuPa= epsilo.union(eff_var)
-        XuYuPa = YuPa.union(cause_var)
-        # if Y is in the Pa(X)
-        YuPa_in_nom = YuPa in w_nom
-        # if Y is not in the Pa(X) 
-        XuYuPa_in_nom = XuYuPa in w_nom
-        
-        valid_cond3 = YuPa_in_nom or XuYuPa_in_nom
-        # Check if it is a valid id_eqn
-        valid_id_eqn = valid_cond1 and valid_cond2 and valid_cond3
-        # Criteria to select the simplest id_eqn
-        simplicity_score = 1/(len(w_nom)+len(w_denom))
-        
-        if valid_id_eqn and simplicity_score > best_simp_score:
-            best_simp_score = simplicity_score
-            
-            if YuPa_in_nom:
-                kernel_flag = False
-                w_nom.remove(YuPa)
-            if XuYuPa_in_nom:
-                kernel_flag = True
-                w_nom.remove(XuYuPa)
-            
-            best_w_nom = w_nom
-            best_w_denom = w_denom
-            best_id_str = id_str_all[i]
-            best_id_eqn = id_eqn
-            
-            valid_eqn_flag = True
+    w_nom, w_denom, kernel_flag, valid_id_eqn = weight_func_parse(id_formular)
     
-    if not valid_eqn_flag:
+    if not valid_id_eqn:
         warnings.warn("No automatic process available for current version of causalBootstrapping lib. Derive manually.")
         return None, None
 
-    weight_func_lam = lambda dist_map, N, kernel, cause_intv_name_map: build_weight_function(best_id_eqn, 
+    id_formular_str = id_formular.tocondstr()
+    weight_func_lam = lambda dist_map, N, kernel, cause_intv_name_map: build_weight_function(id_formular, 
                                                                                              dist_map, 
                                                                                              N, 
                                                                                              cause_intv_name_map, 
                                                                                              kernel)
-    weight_func_expr = Expr(
-        w_nom=best_w_nom,
-        w_denom=best_w_denom,
+    weight_func_expr = weightExpr(
+        w_nom=w_nom,
+        w_denom=w_denom,
         cause_var=cause_var,
         kernel_flag=kernel_flag
     )
     weight_func_str = weight_func_expr.tostr()
-    wanted_dist = weight_func_expr.build_p_term(best_w_nom + best_w_denom)
+    wanted_dist = weight_func_expr.build_p_term(w_nom + w_denom)
     kernel_func = weight_func_expr.build_kernel_term()
     # print out interventional probability expression and required distributions
     if info_print:
-        print("Interventional prob.:{}".format(best_id_str))    
+        print("Interventional prob.:{}".format(id_formular_str))    
         print("Causal bootstrapping weights function: {}".format(weight_func_str))
         print("Required distributions:")
         for i, dist in enumerate(wanted_dist):
