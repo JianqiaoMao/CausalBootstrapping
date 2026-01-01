@@ -13,20 +13,19 @@ from causalbootstrapping.cb_type_defs import (
     DistFunc,
     DistMap,
     WeightFunc,
-    IdExpr,
-    ADMG
+    IdExpr
 )
-from typing import Dict, Sequence, Tuple, Union, Optional, Literal
+from typing import Dict, Sequence, Tuple, Union, Optional, Literal, Any
 
 
-def id(Y:set, X:set, G: ADMG) -> Tuple[Optional[IdExpr], bool]:
+def id(Y:set, X:set, G: Any) -> Tuple[Optional[IdExpr], bool]:
     """
     Identify the causal effect P(Y|do(X)) in a given causal graph G using the ID algorithm.
     
     Parameters:
         Y (set): A set of outcome variable names.
         X (set): A set of intervention variable names.
-        G (grapl.graph object): The causal graph represented as a grapl Graph object.
+        G (grapl.admg object): The causal graph represented as a grapl Graph object.
     
     Returns:
         id_formula (grapl.eqn object): The identified causal effect formula as a grapl Eqn object.

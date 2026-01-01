@@ -20,7 +20,6 @@ CauseIntvMap  = Dict[str, str]                       # e.g. {"Y": "intv_Y"}
 if TYPE_CHECKING:
     from causalbootstrapping.expr_extend import weightExpr, DOExpr
     from grapl.eqn import Eqn
-    from grapl.admg import ADMG
 
 WeightBuilder = Callable[
     [DistMap, int, Optional[KernelFunc], CauseIntvMap],
