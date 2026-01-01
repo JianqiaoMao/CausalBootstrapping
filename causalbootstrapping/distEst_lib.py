@@ -28,7 +28,6 @@ class MultivarContiDistributionEstimator:
         else:
             X = np.asarray(X, dtype=float)
             if X.ndim == 1:
-                # d==1 时你也可以改成 X.reshape(-1, 1)
                 X = X.reshape(1, -1)
         if X.shape[1] != self.d:
             raise ValueError(f"X.shape[1] ({X.shape[1]}) != d ({self.d})")

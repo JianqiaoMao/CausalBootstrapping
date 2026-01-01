@@ -19,10 +19,10 @@ def run_all():
     test_bootstrappers()
     test_general_cb_analysis()
     test_general_causal_bootstrapping()
-    test_backdoor_simple_clas()
-    test_backdoor_simu_reg()
-    test_frontdoor_simple()
-    test_frontdoor_simu()
+    test_backdoor_intv_clas()
+    test_backdoor_cf_reg()
+    test_frontdoor_intv()
+    test_frontdoor_cf()
     
     print("All tests passed!")
     
@@ -83,23 +83,18 @@ def test_bootstrappers():
     data = {"Y": np.array([np.random.randint(0,2) for i in range(N)]).reshape(-1,1),
             "X": np.array([np.random.normal(0,1) for i in range(N)]).reshape(-1,1)}
     w_func = lambda X, Y, intv_Y: (X**2+0.5)+Y+intv_Y
-
-    btstrp_data, weights = be.bootstrapper(data = data,
-                                           w_func = w_func,
-                                           intv_var_name_in_data = 'Y', 
-                                           intv_var_name = 'intv_Y',     
-                                           mode = 'fast')
+    causal_weights = be.weight_compute(w_func = w_func,
+                                       data = data,
+                                       intv_dict = {"intv_Y": 1})
+    btstrp_data_cf = be.cw_bootstrapper(data = data, 
+                                          weights = causal_weights, 
+                                          intv_dict = {"intv_Y": 1}, 
+                                          n_sample = simu_n_sample, 
+                                          sampling_mode = 'fast')
     
-    btstrp_data_simu, weights_simu = be.simu_bootstrapper(data = data, 
-                                                          w_func = w_func, 
-                                                          intv_dict = {"intv_Y": 1}, 
-                                                          n_sample = simu_n_sample, 
-                                                          mode = 'fast')
+    assert btstrp_data_cf["intv_Y"].shape == (simu_n_sample, 1)
     
-    assert btstrp_data["intv_Y"].shape == (N, 1)
-    assert btstrp_data_simu["intv_Y"].shape == (simu_n_sample, 1)
-    
-def test_backdoor_simple_clas():
+def test_backdoor_intv_clas():
     testdata_dir = "../test_data/frontdoor_discY_contZ_contX_discU/"
 
     n_bins_yu = [0, 0]
@@ -122,7 +117,7 @@ def test_backdoor_simple_clas():
     effect_data = {"X": X_train}
     confounder_data = {"U": U_train}
 
-    cb_data = wf.backdoor_simple(cause_data = cause_data, 
+    cb_data = wf.backdoor_intv(cause_data = cause_data, 
                                  effect_data = effect_data, 
                                  confounder_data = confounder_data, 
                                  dist_map = dist_map,
@@ -130,7 +125,7 @@ def test_backdoor_simple_clas():
 
     assert cb_data["intv_Y"].shape == Y_train.shape
 
-def test_backdoor_simu_reg():
+def test_backdoor_cf_reg():
     testdata_dir = "../test_data/backdoor_contY_contX_contU/"
 
     intv_intval_num = 100
@@ -157,9 +152,9 @@ def test_backdoor_simu_reg():
     effect_data = {"X": X_train}
     confounder_data = {"U": U_train}
     
-    cb_data_simu = {}
+    cb_data_cf = {}
     for i, interv_value in enumerate(Y_interv_values):
-        cb_data = wf.backdoor_simu(cause_data = cause_data, 
+        cb_data = wf.backdoor_cf(cause_data = cause_data, 
                                    effect_data = effect_data, 
                                    confounder_data = confounder_data, 
                                    dist_map = dist_map, 
@@ -169,13 +164,13 @@ def test_backdoor_simu_reg():
         
         for key in cb_data:
             if i == 0:
-                cb_data_simu[key] = cb_data[key]
+                cb_data_cf[key] = cb_data[key]
             else:
-                cb_data_simu[key] = np.vstack((cb_data_simu[key], cb_data[key]))
+                cb_data_cf[key] = np.vstack((cb_data_cf[key], cb_data[key]))
                 
-    assert cb_data_simu["intv_Y"].shape[0] == int(N/intv_intval_num)*intv_intval_num
-
-def test_frontdoor_simple():
+    assert cb_data_cf["intv_Y"].shape[0] == int(N/intv_intval_num)*intv_intval_num
+    
+def test_frontdoor_intv():
     testdata_dir = "../test_data/frontdoor_discY_contZ_contX_discU/"
 
     n_bins_yz = [0,20]
@@ -198,7 +193,7 @@ def test_frontdoor_simple():
                 "Y',Z": lambda Y_prime, Z: pdf_yz([Y_prime,Z]),
                 "intv_Y": lambda intv_Y: pdf_y(intv_Y),
                 "Y'": lambda Y_prime: pdf_y(Y_prime)}
-    cb_data = wf.frontdoor_simple(cause_data, 
+    cb_data = wf.frontdoor_intv(cause_data, 
                                   mediator_data, 
                                   effect_data, 
                                   dist_map, 
@@ -206,7 +201,7 @@ def test_frontdoor_simple():
     
     assert cb_data["intv_Y"].shape == Y_train.shape
 
-def test_frontdoor_simu():
+def test_frontdoor_cf():
     testdata_dir = "../test_data/frontdoor_discY_contZ_contX_discU/"
     n_sample = 1000
     n_bins_yz = [0,20]
@@ -230,23 +225,23 @@ def test_frontdoor_simu():
                 "intv_Y": lambda intv_Y: pdf_y(intv_Y),
                 "Y'": lambda Y_prime: pdf_y(Y_prime)}
     
-    cb_data_simu_intv1 = wf.frontdoor_simu(cause_data = cause_data, 
+    cb_data_cf_intv1 = wf.frontdoor_cf(cause_data = cause_data, 
                                            mediator_data = mediator_data, 
                                            effect_data = effect_data,
                                            dist_map = dist_map, 
                                            intv_dict = {"intv_Y": 1}, 
                                            n_sample = n_sample)
-    cb_data_simu_intv2 = wf.frontdoor_simu(cause_data = cause_data, 
+    cb_data_cf_intv2 = wf.frontdoor_cf(cause_data = cause_data, 
                                            mediator_data = mediator_data, 
                                            effect_data = effect_data,
                                            dist_map = dist_map, 
                                            intv_dict = {"intv_Y": 2}, 
                                            n_sample = n_sample)
 
-    assert cb_data_simu_intv1["intv_Y"].shape[0] == n_sample
-    assert cb_data_simu_intv2["intv_Y"].shape[0] == n_sample
-    assert (cb_data_simu_intv1["intv_Y"]==1).all()
-    assert (cb_data_simu_intv2["intv_Y"]==2).all()
+    assert cb_data_cf_intv1["intv_Y"].shape[0] == n_sample
+    assert cb_data_cf_intv2["intv_Y"].shape[0] == n_sample
+    assert (cb_data_cf_intv1["intv_Y"]==1).all()
+    assert (cb_data_cf_intv2["intv_Y"]==2).all()
     
 def test_general_cb_analysis():
     causal_graph = '"Complex case"; \
@@ -302,19 +297,19 @@ def test_general_causal_bootstrapping():
                                                                cause_var_name = 'Y',
                                                                info_print = False)
     
-    cb_data = wf.general_causal_bootstrapping_simple(weight_func_lam = weight_func_lam, 
-                                                     dist_map = dist_map, 
-                                                     data = data, 
-                                                     intv_var_name_in_data = "Y'",
-                                                     cause_intv_name_map = {"Y": "intv_Y"}, 
-                                                     kernel = None)
+    cb_data = wf.general_causal_bootstrapping_intv(weight_func_lam = weight_func_lam, 
+                                                   dist_map = dist_map, 
+                                                   data = data, 
+                                                   intv_var_name_in_data = "Y'",
+                                                   cause_intv_name_map = {"Y": "intv_Y"}, 
+                                                   kernel = None)
 
-    cb_data_intv1= wf.general_causal_bootstrapping_simu(weight_func_lam = weight_func_lam, 
-                                                        dist_map = dist_map, 
-                                                        data = data, 
-                                                        cause_intv_name_map = {"Y": "intv_Y"},
-                                                        intv_dict = {"intv_Y": 1}, 
-                                                        n_sample = n_sample)
+    cb_data_intv1= wf.general_causal_bootstrapping_cf(weight_func_lam = weight_func_lam, 
+                                                      dist_map = dist_map, 
+                                                      data = data, 
+                                                      cause_intv_name_map = {"Y": "intv_Y"},
+                                                      intv_dict = {"intv_Y": 1}, 
+                                                      n_sample = n_sample)
     
     assert cb_data["intv_Y"].shape == Y_train.shape
     assert np.sum(cb_data["intv_Y"] == 1) == np.sum(Y_train == 1)

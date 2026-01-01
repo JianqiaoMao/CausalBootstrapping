@@ -6,18 +6,34 @@ import grapl.expr as expr
 import numpy as np
 import inspect
 import warnings
+import numbers
 from causalbootstrapping.cb_type_defs import (
     DataDict,
     IntvDict,
     DistFunc,
     DistMap,
     WeightFunc,
-    IdExpr
+    IdExpr,
+    ADMG
 )
 from typing import Dict, Sequence, Tuple, Union, Optional, Literal
 
 
-def id(Y, X, G):
+def id(Y:set, X:set, G: ADMG) -> Tuple[Optional[IdExpr], bool]:
+    """
+    Identify the causal effect P(Y|do(X)) in a given causal graph G using the ID algorithm.
+    
+    Parameters:
+        Y (set): A set of outcome variable names.
+        X (set): A set of intervention variable names.
+        G (grapl.graph object): The causal graph represented as a grapl Graph object.
+    
+    Returns:
+        id_formula (grapl.eqn object): The identified causal effect formula as a grapl Eqn object.
+        identifiable (bool): A boolean indicating whether the causal effect is identifiable.
+    
+    """
+    
     Z = set()
     P_star = DOExpr()  
     P_star.addvars(num = G.nodes())
@@ -196,7 +212,7 @@ def build_weight_function(
     corresponding distribution functions.
 
     Parameters:
-        intv_prob (grapl.expr object): The identified interventional probability expression.
+        intv_prob (grapl.eqn object): The identified interventional probability expression.
         dist_map (dict): A dictionary mapping tuples of variable combinations to their corresponding distribution functions.
         cause_intv_name_map (dict): A dictionary mapping cause variable names to their corresponding intervention variable names.
         N (int): The number of data points in the dataset.
@@ -204,6 +220,7 @@ def build_weight_function(
 
     Returns:
         function: The corresponding causal bootstrapping weight function.
+        weightExpr: The weight expression object representing the weight computation.
     """
 
     def divide_functions(**funcs):
@@ -266,118 +283,46 @@ def build_weight_function(
 
     return weight_func, weight_expr
 
-def bootstrapper(
+def cw_bootstrapper(
     data: DataDict,
-    w_func: WeightFunc,
-    intv_var_name_in_data: Union[str, Sequence[str]],
-    intv_var_name: Union[str, Sequence[str]],
-    mode: Literal["fast", "robust"] = "fast",
-    random_state: Optional[int] = None,
-) -> Tuple[Dict[str, np.ndarray], np.ndarray]:
-    """
-    Perform causal bootstrapping on the input observational data using the provided weight function and given observations.
-    
-    Parameters:
-        data (dict): A dictionary containing variable names as keys and their corresponding data arrays as values.
-        w_func (function): The causal bootstrapping weight function.
-        intv_var_name_in_data (str or list of str): A list of strings representing the variable names of observational data used as the interventional values.
-        intv_var_name (str or list of str): The variable name for the interventional variable.
-        mode (str, optional): The mode for bootstrapping. Options: 'fast' or 'robust'. Defaults to 'fast'.
-        random_state (int, optional): The random state for the bootstrapping. Defaults to None.
-    
-    Returns:
-        bootstrap_data (dict): A dictionary containing variable names as keys and their corresponding bootstrapped data arrays as values.
-        weights (numpy.ndarray): An array containing the computed causal bootstrapping weights for each data point.
-    """
-    if isinstance(intv_var_name_in_data, str):
-        intv_var_name_in_data = [intv_var_name_in_data]
-    if isinstance(intv_var_name, str):
-        intv_var_name = [intv_var_name]
-    rng = np.random.RandomState(random_state)
-    
-    var_names = list(data.keys())
-    N = data[var_names[0]].shape[0]
-
-    stack_intv_data = np.hstack([data[key] if data[key].ndim == 2 else data[key].reshape(-1,1) for key in intv_var_name_in_data])
-    intv_var_values_unique, counts = np.unique(stack_intv_data, axis=0, return_counts=True)
-    intv_dims = [data[name].shape[1] if data[name].ndim == 2 else 1
-             for name in intv_var_name_in_data]
-    intv_dim_offsets = np.cumsum([0] + intv_dims)
-    intv_var_slices = {
-        name: slice(intv_dim_offsets[i], intv_dim_offsets[i+1])
-        for i, name in enumerate(intv_var_name)
-    }    
-    
-    causal_weights = np.zeros((N, intv_var_values_unique.shape[0]))
-
-    bootstrap_data = {}
-    for var in var_names:
-        bootstrap_data[var] = np.zeros((N, data[var].shape[1]))
-    for i, var in enumerate(intv_var_name):
-        bootstrap_data[var] = np.zeros((N, intv_dims[i]))
-
-    ind_pos = 0
-    for i, (intv_, n) in enumerate(zip(intv_var_values_unique, counts)):
-        intv_i_dict = {name: intv_[intv_var_slices[name]] for name in intv_var_name}
-        weight_intv = weight_compute(w_func, data, intv_i_dict)
-        causal_weights[:, i] = weight_intv
-        if mode == "fast":
-            sample_indices = rng.choice(range(N), p=weight_intv/np.sum(weight_intv), size=n, replace=True)
-        elif mode == "robust":
-            sample_indices = [gumbel_max(weight_intv) for _ in range(n)]
-        else:
-            raise ValueError("Invalid mode. Choose either 'fast' or 'robust'.")
-        
-        for var in var_names:
-            bootstrap_data[var][ind_pos:ind_pos+n] = data[var][sample_indices]
-        for var in intv_var_name:
-            bootstrap_data[var][ind_pos:ind_pos+n] = np.array([intv_[intv_var_slices[var]] for _ in range(n)])
-        ind_pos += n
-        
-    return bootstrap_data, causal_weights
-
-def simu_bootstrapper(
-    data: DataDict,
-    w_func: WeightFunc,
+    weights: np.ndarray,
     intv_dict: IntvDict,
     n_sample: int,
-    mode: Literal["fast", "robust"] = "fast",
-    random_state: Optional[int] = None,
+    sampling_mode: Literal["fast", "robust"] = "fast",
+    random_state: Optional[int] = None
 ) -> Tuple[Dict[str, np.ndarray], np.ndarray]:
     """
-    Perform simulational causal bootstrapping on the input observational data using the provided weight function and 
+    Perform causal bootstrapping on the input observational data using the provided weight function and 
     designated intervention values.
 
     Parameters:
         data (dict): A dictionary containing variable names as keys and their corresponding data arrays as values.
-        w_func (function): The causal bootstrapping weight function.
+        weights (numpy.ndarray): An array containing the computed causal bootstrapping weights for each data point (N,1).
         intv_dict (dict): key: str, value: int/list(len: M)/ndarray(M,), a dictionary containing the intervention variable names and their corresponding values.
         n_sample (int): The number of samples to be generated through bootstrapping.
-        mode (str, optional): The mode for bootstrapping. Options: 'fast' or 'robust'. Defaults to 'fast'.
+        sampling_mode (str, optional): The mode for bootstrapping. Options: 'fast' or 'robust'. Defaults to 'fast'.
         random_state (int, optional): The random state for the bootstrapping. Defaults to None.
-
+        
     Returns:
         bootstrap_data (dict): A dictionary containing variable names as keys and their corresponding bootstrapped data arrays as values.
         weights (numpy.ndarray): An array containing the computed causal bootstrapping weights for each data point.
     """
     rng = np.random.RandomState(random_state)
-    
-    causal_weights = weight_compute(w_func, data, intv_dict)
-    
+    weights = weights.reshape(-1)
     var_names = list(data.keys())
     N = data[var_names[0]].shape[0]
     bootstrap_data = {}
-    if mode == "fast":
-        sample_indices = rng.choice(range(N), p=causal_weights/np.sum(causal_weights), size=n_sample, replace=True)
-    elif mode == "robust":
-        sample_indices = [gumbel_max(causal_weights) for _ in range(n_sample)]
+    if sampling_mode == "fast":
+        sample_indices = rng.choice(range(N), p=weights/np.sum(weights), size=n_sample, replace=True)
+    elif sampling_mode == "robust":
+        sample_indices = [gumbel_max(weights) for _ in range(n_sample)]
     else:
         raise ValueError("Invalid mode. Choose either 'fast' or 'robust'.")
     
     for var in var_names:
         bootstrap_data[var.replace("'","")] = data[var][sample_indices]
     for intv_var in intv_dict.keys():
-        if isinstance(intv_dict[intv_var], int):
+        if isinstance(intv_dict[intv_var], numbers.Real) and not isinstance(intv_dict[intv_var], bool):
             intv_dict[intv_var] = [intv_dict[intv_var]]
         if isinstance(intv_dict[intv_var], np.ndarray):
             if intv_dict[intv_var].ndim >= 2:
@@ -385,4 +330,4 @@ def simu_bootstrapper(
             intv_dict[intv_var] = intv_dict[intv_var].flatten().tolist()
         bootstrap_data[intv_var] = np.array([intv_dict[intv_var] for _ in range(n_sample)]).reshape(n_sample, len(intv_dict[intv_var]))
 
-    return bootstrap_data, causal_weights
+    return bootstrap_data

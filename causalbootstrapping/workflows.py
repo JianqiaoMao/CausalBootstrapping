@@ -31,14 +31,14 @@ def general_cb_analysis(
     for a given causal graph and a specified intervention.
 
     Parameters:
-    - causal_graph (str): A causal graph representing the relationships between variables.
-    - effect_var_name (str): The name of the effect variable for the causal intervention.
-    - cause_var_name (str): The name of the cause variable responsible for the intervention.
-    - info_print (bool, optional): A boolean indicating whether to print the weight function and required distributions. Default is True.
+    causal_graph (str): A causal graph representing the relationships between variables.
+    effect_var_name (str): The name of the effect variable for the causal intervention.
+    cause_var_name (str): The name of the cause variable responsible for the intervention.
+    info_print (bool, optional): A boolean indicating whether to print the weight function and required distributions. Default is True.
 
     Returns:
-    - weight_func_lam (function): A lambda function to calculate causal bootstrapping weights.
-    - weight_func_str (str): The string representation of the causal bootstrapping weights function.
+    weight_func_lam (function): A lambda function to calculate causal bootstrapping weights.
+    weight_func_str (str): The string representation of the causal bootstrapping weights function.
 
     Usage Instructions:
     1. Call this function with the causal graph and variable names.
@@ -98,14 +98,14 @@ def general_cb_analysis(
 
     return weight_func_lam, weight_func_expr
 
-def general_causal_bootstrapping_simple(
+def general_causal_bootstrapping_intv(
     weight_func_lam: WeightBuilder, 
     dist_map: DistMap, 
     data: DataDict, 
     intv_var_name_in_data: str, 
     cause_intv_name_map: CauseIntvMap,
     kernel: Optional[KernelFunc] = None, 
-    mode: Literal["fast", "robust"] = "fast", 
+    sampling_mode: Literal["fast", "robust"] = "fast", 
     random_state: Optional[int] = None
 ) -> Dict[str, np.ndarray]:
     """
@@ -120,7 +120,7 @@ def general_causal_bootstrapping_simple(
         intv_var_name_in_data (str): The name of the intervention variable in the 'data' dictionary. The order should match intv_var_name.
         cause_intv_name_map (dict): A dictionary mapping cause variable names to their corresponding intervention variable names.
         kernel (function, optional): An optional kernel function that can be used in weight computation. Default is None.
-        mode (str, optional): A string indicating the bootstrapping mode. It can be either 'fast' or 'robust' depending on the implementation. Default is 'fast'.
+        sampling_mode (str, optional): A string indicating the bootstrapping mode. It can be either 'fast' or 'robust' depending on the implementation. Default is 'fast'.
         random_state (int, optional): The random state for the bootstrapping. Defaults to None.
         
     Returns:
@@ -132,15 +132,41 @@ def general_causal_bootstrapping_simple(
                                 N = N, 
                                 kernel = kernel, 
                                 cause_intv_name_map = cause_intv_name_map)
-    bootstrapped_data, weights = bootstrapper(data = data, w_func = w_func, 
-                                              intv_var_name_in_data = intv_var_name_in_data, 
-                                              intv_var_name = intv_var_name,
-                                              mode = mode,
-                                              random_state = random_state)
     
-    return bootstrapped_data
+    if isinstance(intv_var_name_in_data, str):
+        intv_var_name_in_data = [intv_var_name_in_data]
+    if isinstance(intv_var_name, str):
+        intv_var_name = [intv_var_name]    
 
-def general_causal_bootstrapping_simu(
+    stack_intv_data = np.hstack([data[key] if data[key].ndim == 2 else data[key].reshape(-1,1) for key in intv_var_name_in_data])
+    intv_var_values_unique, counts = np.unique(stack_intv_data, axis=0, return_counts=True)
+    intv_dims = [data[name].shape[1] if data[name].ndim == 2 else 1
+             for name in intv_var_name_in_data]
+    intv_dim_offsets = np.cumsum([0] + intv_dims)
+    intv_var_slices = {
+        name: slice(intv_dim_offsets[i], intv_dim_offsets[i+1])
+        for i, name in enumerate(intv_var_name)
+    }    
+
+    bootstrapped_data = {}
+    for i, (intv_, n) in enumerate(zip(intv_var_values_unique, counts)):
+        intv_i_dict = {name: intv_[intv_var_slices[name]] for name in intv_var_name}
+        weight_intv = weight_compute(w_func, data, intv_i_dict)
+        bootstrapped_data_i = cw_bootstrapper(data = data, 
+                                            weights = weight_intv, 
+                                            intv_dict = intv_i_dict, 
+                                            n_sample = n, 
+                                            sampling_mode = sampling_mode, 
+                                            random_state = random_state)
+        for key in bootstrapped_data_i:
+            if key not in bootstrapped_data:
+                bootstrapped_data[key] = bootstrapped_data_i[key]
+            else:
+                bootstrapped_data[key] = np.vstack((bootstrapped_data[key], bootstrapped_data_i[key]))
+    return bootstrapped_data
+    
+
+def general_causal_bootstrapping_cf(
     weight_func_lam: WeightBuilder, 
     dist_map: DistMap, 
     data: DataDict, 
@@ -148,7 +174,7 @@ def general_causal_bootstrapping_simu(
     intv_dict: IntvDict, 
     n_sample: int, 
     kernel: Optional[KernelFunc] = None, 
-    mode: Literal["fast", "robust"] = "fast", 
+    sampling_mode: Literal["fast", "robust"] = "fast", 
     random_state: Optional[int] = None
 ) -> Dict[str, np.ndarray]:
     """
@@ -164,7 +190,7 @@ def general_causal_bootstrapping_simu(
         intv_dict (dict): key: str, value: int/list(len: M)/ndarray(M,), a dictionary containing the intervention variable names and their corresponding values.
         n_sample (int): The number of samples to be generated through bootstrapping.
         kernel (function, optional): An optional kernel function that can be used in weight computation. Default is None.
-        mode (str, optional): A string indicating the bootstrapping mode. It can be either 'fast' or 'robust' depending on the implementation. Default is 'fast'.
+        sampling_mode (str, optional): A string indicating the bootstrapping mode. It can be either 'fast' or 'robust' depending on the implementation. Default is 'fast'.
         random_state (int, optional): The random state for the bootstrapping. Defaults to None.
         
     Returns:
@@ -175,23 +201,27 @@ def general_causal_bootstrapping_simu(
                                 N = N, 
                                 kernel = kernel, 
                                 cause_intv_name_map = cause_intv_name_map)
-    bootstrapped_data, weights = simu_bootstrapper(data = data, 
-                                                   w_func = w_func, 
-                                                   intv_dict = intv_dict, 
-                                                   n_sample = n_sample, 
-                                                   mode = mode, 
-                                                   random_state = random_state)
+    causal_weights = weight_compute(w_func = w_func, 
+                                    data = data,
+                                    intv_dict = intv_dict)    
+    bootstrapped_data = cw_bootstrapper(data = data, 
+                                        weights = causal_weights, 
+                                        intv_dict = intv_dict, 
+                                        n_sample = n_sample, 
+                                        sampling_mode = sampling_mode, 
+                                        random_state = random_state)
+        
     
     return bootstrapped_data
 
-def backdoor_simple(
+def backdoor_intv(
     cause_data: DataDict, 
     effect_data: DataDict, 
     confounder_data: DataDict, 
     dist_map: DistMap, 
     cause_intv_name_map: CauseIntvMap,
     kernel_intv: Optional[KernelFunc] = None, 
-    mode: Literal["fast", "robust"] = "fast", 
+    sampling_mode: Literal["fast", "robust"] = "fast", 
     random_state: Optional[int] = None
 ) -> Dict[str, np.ndarray]:
     """
@@ -205,7 +235,7 @@ def backdoor_simple(
         dist_map (dict): A dictionary mapping tuples of variable combinations to their corresponding distribution functions.
         cause_intv_name_map (dict): A dictionary mapping cause variable names to their corresponding intervention variable names.
         kernel_intv (function, optional): The kernel function to be used in the backdoor bootstrapping for the cause variable. Defaults to None, use discrete Kronecker delta.
-        mode (str, optional): A string indicating the bootstrapping mode. It can be either 'fast' or 'robust' depending on the implementation. Default is 'fast'.
+        sampling_mode (str, optional): A string indicating the bootstrapping mode. It can be either 'fast' or 'robust' depending on the implementation. Default is 'fast'.
         random_state (int, optional): The random state for the bootstrapping. Defaults to None.
         
     Returns:
@@ -236,18 +266,18 @@ def backdoor_simple(
     else:
         _kernel_intv = eval(f"lambda {intv_var_name},{cause_var_name}: kernel_intv({intv_var_name},{cause_var_name})",
                             {"kernel_intv": kernel_intv})
-    cb_data = general_causal_bootstrapping_simple(weight_func_lam = weight_func_lam, 
-                                                  dist_map = dist_map, 
-                                                  data = data, 
-                                                  intv_var_name_in_data = cause_var_name, 
-                                                  cause_intv_name_map = cause_intv_name_map,
-                                                  kernel = _kernel_intv, 
-                                                  mode = mode, 
-                                                  random_state = random_state)
+    cb_data = general_causal_bootstrapping_intv(weight_func_lam = weight_func_lam, 
+                                                dist_map = dist_map, 
+                                                data = data, 
+                                                intv_var_name_in_data = cause_var_name, 
+                                                cause_intv_name_map = cause_intv_name_map,
+                                                kernel = _kernel_intv, 
+                                                sampling_mode = sampling_mode, 
+                                                random_state = random_state)
 
     return cb_data
 
-def backdoor_simu(
+def backdoor_cf(
     cause_data: DataDict, 
     effect_data: DataDict, 
     confounder_data: DataDict, 
@@ -255,7 +285,7 @@ def backdoor_simu(
     intv_dict: IntvDict, 
     n_sample: int, 
     kernel_intv: Optional[KernelFunc] = None,
-    mode: Literal["fast", "robust"] = "fast", 
+    sampling_mode: Literal["fast", "robust"] = "fast", 
     random_state: Optional[int] = None
 ) -> Dict[str, np.ndarray]:
     """
@@ -270,7 +300,7 @@ def backdoor_simu(
         intv_dict (dict): key: str, value: int/list(len: M)/ndarray(M,), a dictionary containing the intervention variable names and their corresponding values.
         n_sample (int): The number of samples to be generated through bootstrapping.
         kernel_intv (function, optional): The kernel function to be used in the backdoor adjustment for the cause variable. Defaults to None.
-        mode (str, optional): A string indicating the bootstrapping mode. It can be either 'fast' or 'robust' depending on the implementation. Default is 'fast'.
+        sampling_mode (str, optional): A string indicating the bootstrapping mode. It can be either 'fast' or 'robust' depending on the implementation. Default is 'fast'.
         random_state (int, optional): The random state for the bootstrapping. Defaults to None.
         
     Returns:
@@ -309,24 +339,24 @@ def backdoor_simu(
         _kernel_intv = eval(f"lambda {cause_var_name}, {intv_var_name}: kernel_intv({cause_var_name}, {intv_var_name})",
                             {"kernel_intv": kernel_intv})
     
-    cb_data = general_causal_bootstrapping_simu(weight_func_lam = weight_func_lam, 
-                                                dist_map = dist_map, 
-                                                data = data, 
-                                                cause_intv_name_map = cause_intv_name_map,
-                                                intv_dict = intv_dict, 
-                                                n_sample = n_sample, 
-                                                kernel = _kernel_intv, 
-                                                mode = mode, 
-                                                random_state = random_state)
+    cb_data = general_causal_bootstrapping_cf(weight_func_lam = weight_func_lam, 
+                                              dist_map = dist_map, 
+                                              data = data, 
+                                              cause_intv_name_map = cause_intv_name_map,
+                                              intv_dict = intv_dict, 
+                                              n_sample = n_sample, 
+                                              kernel = _kernel_intv, 
+                                              sampling_mode = sampling_mode, 
+                                              random_state = random_state)
     return cb_data
 
-def frontdoor_simple(
+def frontdoor_intv(
     cause_data: DataDict, 
     mediator_data: DataDict, 
     effect_data: DataDict, 
     dist_map: DistMap, 
     cause_intv_name_map: CauseIntvMap,
-    mode: Literal["fast", "robust"] = "fast", 
+    sampling_mode: Literal["fast", "robust"] = "fast", 
     random_state: Optional[int] = None
 ) -> Dict[str, np.ndarray]:
     """
@@ -339,7 +369,7 @@ def frontdoor_simple(
         effect_data (dict): A dictionary containing the effect variable name as a key and its data array as the value.
         dist_map (dict): A dictionary mapping tuples of variable combinations to their corresponding distribution functions.
         cause_intv_name_map (dict): A dictionary mapping cause variable names to their corresponding intervention variable names.
-        mode (str, optional): A string indicating the bootstrapping mode. It can be either 'fast' or 'robust' depending on the implementation. Default is 'fast'.
+        sampling_mode (str, optional): A string indicating the bootstrapping mode. It can be either 'fast' or 'robust' depending on the implementation. Default is 'fast'.
         random_state (int, optional): The random state for the bootstrapping. Defaults to None.
         
     Returns:
@@ -363,24 +393,24 @@ def frontdoor_simple(
                                                            effect_var_name = effect_var_name, 
                                                            cause_var_name = cause_var_name, 
                                                            info_print= False)
-    cb_data = general_causal_bootstrapping_simple(weight_func_lam = weight_func_lam, 
-                                                  dist_map = dist_map, 
-                                                  data = data, 
-                                                  intv_var_name_in_data = intv_var_name_in_data, 
-                                                  cause_intv_name_map = cause_intv_name_map,
-                                                  mode = mode, 
-                                                  random_state = random_state)
+    cb_data = general_causal_bootstrapping_intv(weight_func_lam = weight_func_lam, 
+                                                dist_map = dist_map, 
+                                                data = data, 
+                                                intv_var_name_in_data = intv_var_name_in_data, 
+                                                cause_intv_name_map = cause_intv_name_map,
+                                                sampling_mode = sampling_mode, 
+                                                random_state = random_state)
 
     return cb_data
 
-def frontdoor_simu(
+def frontdoor_cf(
     cause_data: DataDict, 
     mediator_data: DataDict, 
     effect_data: DataDict, 
     dist_map: DistMap, 
     intv_dict: IntvDict, 
     n_sample: int,
-    mode: Literal["fast", "robust"] = "fast", 
+    sampling_mode: Literal["fast", "robust"] = "fast", 
     random_state: Optional[int] = None
 ) -> Dict[str, np.ndarray]:
     """
@@ -394,7 +424,7 @@ def frontdoor_simu(
         dist_map (dict): A dictionary mapping tuples of variable combinations to their corresponding distribution functions.
         intv_dict (dict): key: str, value: int/list/ndarray(M,), a dictionary containing the intervention variable names and their corresponding values.
         n_sample (int): The number of samples to be generated through bootstrapping.
-        mode (str, optional): A string indicating the bootstrapping mode. It can be either 'fast' or 'robust' depending on the implementation. Default is 'fast'.
+        sampling_mode (str, optional): A string indicating the bootstrapping mode. It can be either 'fast' or 'robust' depending on the implementation. Default is 'fast'.
         random_state (int, optional): The random state for the bootstrapping. Defaults to None.
 
     Returns:
@@ -424,12 +454,13 @@ def frontdoor_simu(
     weight_func_lam, _ = general_cb_analysis(causal_graph = causal_graph, 
                                                            effect_var_name = effect_var_name, 
                                                            cause_var_name = cause_var_name, info_print= False)
-    cb_data = general_causal_bootstrapping_simu(weight_func_lam = weight_func_lam, 
-                                                dist_map = dist_map, 
-                                                data = data, 
-                                                cause_intv_name_map = cause_intv_name_map,
-                                                intv_dict = intv_dict, 
-                                                n_sample = n_sample, mode = mode, 
-                                                random_state = random_state)
+    cb_data = general_causal_bootstrapping_cf(weight_func_lam = weight_func_lam, 
+                                              dist_map = dist_map, 
+                                              data = data, 
+                                              cause_intv_name_map = cause_intv_name_map,
+                                              intv_dict = intv_dict, 
+                                              n_sample = n_sample, 
+                                              sampling_mode = sampling_mode, 
+                                              random_state = random_state)
     return cb_data
 # %%
