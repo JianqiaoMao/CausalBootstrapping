@@ -1,10 +1,14 @@
-# CausalBootstrapping
+# CausalBootstrapping[![DOI](https://sandbox.zenodo.org/badge/715233323.svg)](https://sandbox.zenodo.org/doi/10.5072/zenodo.24049)
 
 CausalBootstrapping identifies causal effects from a specified causal graph and
 constructs weights for empirical resampling towards an estimated interventional
 distribution. It includes graph analysis, distribution estimators, and front-door,
 back-door and general weighting workflows. Validity depends on the causal
 assumptions, available support and quality of the estimated distributions.
+
+<div style="text-align: center;">
+  <img src="https://github.com/JianqiaoMao/CausalBootstrapping/blob/main/Images/causalbootstrapping.png" width="1500">
+</div>
 
 ## Installation
 
@@ -167,5 +171,3 @@ not independent held-out data.
   year={2019}
 }
 ```
-
-Author: Jianqiao Mao. The original GPL license is retained in `LICENSE`.
