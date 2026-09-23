@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 WeightBuilder = Callable[
     [DistMap, int, Optional[KernelFunc], CauseIntvMap],
-    Tuple[WeightFunc, "Expr"]
+    Tuple[WeightFunc, "weightExpr"]
 ]
 
 # External ID-expression from GRAPL (kept as Any to avoid tight coupling)

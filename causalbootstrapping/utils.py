@@ -22,18 +22,22 @@ def remove_incoming(G, node):
     G.vars[node].bidirects = set()
     return G
 
-def gumbel_max(weights: np.ndarray) -> int:
+def gumbel_max(weights: np.ndarray, rng=None) -> int:
+    """Draw one index with probability proportional to finite nonnegative weights.
+
+    Pass a NumPy RandomState/Generator for isolated, reproducible sampling.
+    When omitted, the legacy global NumPy random stream is used.
     """
-    Apply the Gumbel-max trick to sample indices based on the provided weights.
-    
-    Parameters:
-        weights (numpy.ndarray): The weights for sampling.
-    
-    Returns:
-        int: The index of the sampled weight.
-    """
-    gumbel_noise = -np.log(-np.log(np.random.rand(*weights.shape)))
-    return np.argmax(np.log(weights) + gumbel_noise)
+    weights = np.asarray(weights, dtype=float).reshape(-1)
+    if (weights.size == 0 or not np.isfinite(weights).all()
+            or (weights < 0).any() or not (weights > 0).any()):
+        raise ValueError("weights must be finite, nonnegative and have positive mass.")
+    rng = np.random if rng is None else rng
+    log_weights = np.full(weights.shape, -np.inf)
+    positive = weights > 0
+    log_weights[positive] = np.log(weights[positive])
+    return int(np.argmax(log_weights + rng.gumbel(size=weights.size)))
+
 
 def weight_func_parse(id_formular):
     

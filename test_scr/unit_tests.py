@@ -1,7 +1,9 @@
 #%%
 import sys
+import os
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
+DATA_ROOT = Path(os.environ.get("CAUSALBOOTSTRAPPING_DATA_ROOT", ROOT / "test_data"))
 sys.path.insert(0, str(ROOT))
 
 from causalbootstrapping import workflows as wf
@@ -27,7 +29,7 @@ def run_all():
     print("All tests passed!")
     
 def test_weight_compute():
-    testdata_dir = "../test_data/frontdoor_discY_contZ_contX_discU/"
+    testdata_dir = str(DATA_ROOT / "frontdoor_discY_contZ_contX_discU") + "/"
     n_bins_yu = [0, 0]
     n_bins_u = [0]
     
@@ -95,7 +97,7 @@ def test_bootstrappers():
     assert btstrp_data_cf["intv_Y"].shape == (simu_n_sample, 1)
     
 def test_backdoor_intv_clas():
-    testdata_dir = "../test_data/frontdoor_discY_contZ_contX_discU/"
+    testdata_dir = str(DATA_ROOT / "frontdoor_discY_contZ_contX_discU") + "/"
 
     n_bins_yu = [0, 0]
     n_bins_u = [0]
@@ -126,7 +128,7 @@ def test_backdoor_intv_clas():
     assert cb_data["intv_Y"].shape == Y_train.shape
 
 def test_backdoor_cf_reg():
-    testdata_dir = "../test_data/backdoor_contY_contX_contU/"
+    testdata_dir = str(DATA_ROOT / "backdoor_contY_contX_contU") + "/"
 
     intv_intval_num = 100
     width = 1
@@ -171,7 +173,7 @@ def test_backdoor_cf_reg():
     assert cb_data_cf["intv_Y"].shape[0] == int(N/intv_intval_num)*intv_intval_num
     
 def test_frontdoor_intv():
-    testdata_dir = "../test_data/frontdoor_discY_contZ_contX_discU/"
+    testdata_dir = str(DATA_ROOT / "frontdoor_discY_contZ_contX_discU") + "/"
 
     n_bins_yz = [0,20]
     n_bins_y = [0]
@@ -202,7 +204,7 @@ def test_frontdoor_intv():
     assert cb_data["intv_Y"].shape == Y_train.shape
 
 def test_frontdoor_cf():
-    testdata_dir = "../test_data/frontdoor_discY_contZ_contX_discU/"
+    testdata_dir = str(DATA_ROOT / "frontdoor_discY_contZ_contX_discU") + "/"
     n_sample = 1000
     n_bins_yz = [0,20]
     n_bins_y = [0]
@@ -260,7 +262,7 @@ def test_general_cb_analysis():
     assert weight_func_expr is not None
     
 def test_general_causal_bootstrapping():
-    testdata_dir = "../test_data/complex_scenario/"
+    testdata_dir = str(DATA_ROOT / "complex_scenario") + "/"
     causal_graph = '"Complex case"; \
                     Y; X; U; Z; \
                     U -> Y; \
@@ -315,6 +317,11 @@ def test_general_causal_bootstrapping():
     assert np.sum(cb_data["intv_Y"] == 1) == np.sum(Y_train == 1)
     assert cb_data_intv1["intv_Y"].shape == (n_sample, 1)
 
-run_all()  
 
 # %%
+
+
+if __name__ == "__main__":
+    if not DATA_ROOT.is_dir():
+        raise SystemExit("External CSVs are not shipped. Set CAUSALBOOTSTRAPPING_DATA_ROOT or run tests/ instead.")
+    run_all()

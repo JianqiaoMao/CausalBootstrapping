@@ -1,5 +1,7 @@
 
-from causalbootstrapping.backend import *
+from causalbootstrapping.backend import (
+    id, build_weight_function, weight_compute, cw_bootstrapper,
+)
 from causalbootstrapping.expr_extend import weightExpr
 from causalbootstrapping.utils import weight_func_parse
 import grapl.algorithms as algs
@@ -38,7 +40,7 @@ def general_cb_analysis(
 
     Returns:
     weight_func_lam (function): A lambda function to calculate causal bootstrapping weights.
-    weight_func_str (str): The string representation of the causal bootstrapping weights function.
+    weight_func_expr (weightExpr): The symbolic weight expression; use .tostr() for text.
 
     Usage Instructions:
     1. Call this function with the causal graph and variable names.
@@ -52,8 +54,8 @@ def general_cb_analysis(
     
     grapl_obj = dsl.GraplDSL()
     G = grapl_obj.readgrapl(causal_graph)
-    id_formular, identifiable = id(Y = set(effect_var_name),
-                                  X = set(cause_var_name),
+    id_formular, identifiable = id(Y = {effect_var_name},
+                                  X = {cause_var_name},
                                   G = G)
 
     if not identifiable:
@@ -115,7 +117,7 @@ def general_causal_bootstrapping_intv(
 
     Parameters:
         weight_func_lam (function): A lambda or function that calculates weights. It should take 'dist_map', 'N', and optionally 'kernel' as arguments.
-        dist_map (dict): An object representing a distance map, which is used by 'weight_func_lam' to calculate weights.
+        dist_map (dict): A probability distribution map, which is used by 'weight_func_lam' to calculate weights.
         data (dict): A dictionary containing the dataset. Keys are variable names and values are corresponding data arrays.
         intv_var_name_in_data (str): The name of the intervention variable in the 'data' dictionary. The order should match intv_var_name.
         cause_intv_name_map (dict): A dictionary mapping cause variable names to their corresponding intervention variable names.
@@ -127,7 +129,7 @@ def general_causal_bootstrapping_intv(
         dict: A dictionary containing variable names as keys and their corresponding bootstrapped data arrays as values.
     """
     N = list(data.values())[0].shape[0]
-    intv_var_name = list(cause_intv_name_map.values())[0]
+    intv_var_name = list(cause_intv_name_map.values())
     w_func, _ = weight_func_lam(dist_map = dist_map, 
                                 N = N, 
                                 kernel = kernel, 
@@ -149,6 +151,7 @@ def general_causal_bootstrapping_intv(
     }    
 
     bootstrapped_data = {}
+    rng = np.random.RandomState(random_state)
     for i, (intv_, n) in enumerate(zip(intv_var_values_unique, counts)):
         intv_i_dict = {name: intv_[intv_var_slices[name]] for name in intv_var_name}
         weight_intv = weight_compute(w_func, data, intv_i_dict)
@@ -157,12 +160,12 @@ def general_causal_bootstrapping_intv(
                                             intv_dict = intv_i_dict, 
                                             n_sample = n, 
                                             sampling_mode = sampling_mode, 
-                                            random_state = random_state)
+                                            random_state = int(rng.randint(0, 2**31 - 1)))
         for key in bootstrapped_data_i:
             if key not in bootstrapped_data:
                 bootstrapped_data[key] = bootstrapped_data_i[key]
             else:
-                bootstrapped_data[key] = np.vstack((bootstrapped_data[key], bootstrapped_data_i[key]))
+                bootstrapped_data[key] = np.concatenate((bootstrapped_data[key], bootstrapped_data_i[key]), axis=0)
     return bootstrapped_data
     
 
@@ -184,7 +187,7 @@ def general_causal_bootstrapping_cf(
 
     Parameters:
         weight_func_lam (function): A lambda or function that calculates weights. It should take 'dist_map', 'N', and optionally 'kernel' as arguments.
-        dist_map (dict): An object representing a distance map, which is used by 'weight_func_lam' to calculate weights.
+        dist_map (dict): A probability distribution map, which is used by 'weight_func_lam' to calculate weights.
         data (dict): A dictionary containing the dataset. Keys are variable names and values are corresponding data arrays.
         cause_intv_name_map (dict): A dictionary mapping cause variable names to their corresponding intervention variable names.
         intv_dict (dict): key: str, value: int/list(len: M)/ndarray(M,), a dictionary containing the intervention variable names and their corresponding values.
@@ -317,6 +320,7 @@ def backdoor_cf(
         warnings.warn("Intervention variable in intv_dict should be different from the cause variable name in cause_data. \
                       Automatically rewrite interventional variable as 'intv_{}'.".format(cause_var_name))
         intv_dict = {"intv_{}".format(cause_var_name): intv_dict[intv_var_name]}
+        cause_intv_name_map = {cause_var_name: "intv_{}".format(cause_var_name)}
         intv_var_name = "intv_{}".format(cause_var_name)
 
     data = cause_data.copy()
@@ -441,6 +445,7 @@ def frontdoor_cf(
         warnings.warn("Intervention variable in intv_dict should be different from the cause variable name in cause_data. \
                       Automatically rewrite interventional variable as 'intv_{}'.".format(cause_var_name))
         intv_dict = {"intv_{}".format(cause_var_name): intv_dict[intv_var_name]}
+        cause_intv_name_map = {cause_var_name: "intv_{}".format(cause_var_name)}
     
     data = cause_data.copy()
     data.update(effect_data)

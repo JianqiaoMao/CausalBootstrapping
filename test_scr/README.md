@@ -1,0 +1,1 @@
+Legacy data-dependent checks are retained here. Set `CAUSALBOOTSTRAPPING_DATA_ROOT` to the external CSV root, then run `python test_scr/unit_tests.py`. For self-contained checks use `python -m unittest discover -s tests -v`.

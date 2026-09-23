@@ -9,8 +9,6 @@ from scipy.stats import multivariate_normal, gaussian_kde
 from scipy.stats import rv_discrete
 from scipy.cluster.vq import kmeans2
 from sklearn.mixture import GaussianMixture
-import matplotlib.pyplot as plt
-import sympy as sy
 from scipy import integrate
 import warnings
 
@@ -19,6 +17,8 @@ class MultivarContiDistributionEstimator:
         self.data_fit = np.asarray(data_fit, dtype=float)
         if self.data_fit.ndim != 2:
             raise ValueError(f"Expected 2D array for data_fit in shape (N,d), got {self.data_fit.ndim}D array.")
+        if 0 in self.data_fit.shape or not np.isfinite(self.data_fit).all():
+            raise ValueError("data_fit must be nonempty and finite.")
         self.d = self.data_fit.shape[1]
         self.pdf = None
         
@@ -28,7 +28,9 @@ class MultivarContiDistributionEstimator:
         else:
             X = np.asarray(X, dtype=float)
             if X.ndim == 1:
-                X = X.reshape(1, -1)
+                X = X.reshape(-1, 1) if self.d == 1 else X.reshape(1, -1)
+        if X.ndim != 2:
+            raise ValueError("Evaluation points must be a 2D array or 1D vector.")
         if X.shape[1] != self.d:
             raise ValueError(f"X.shape[1] ({X.shape[1]}) != d ({self.d})")
         return X
@@ -41,7 +43,7 @@ class MultivarContiDistributionEstimator:
 
         def pdf_eval(X):
             X = self._ensure_2d_points(X)
-            return mvn.pdf(X)
+            return np.asarray(mvn.pdf(X)).reshape(-1)
         
         self.pdf = pdf_eval
         
@@ -185,6 +187,7 @@ class MultivarContiDistributionEstimator:
         return pdf_eval_grid
 
     def plot(self, n_bins, title=None):
+        import matplotlib.pyplot as plt
         
         if self.pdf is None:
             raise RuntimeError(
@@ -204,20 +207,32 @@ class MultivarContiDistributionEstimator:
         plt.show()
 
 class MultivarDiscDistributionEstimator:
-    def __init__(self, data_fit, data_est):
-        self.data_fit = data_fit
+    def __init__(self, data_fit, data_est=None):
+        self.data_fit = np.asarray(data_fit, dtype=float)
+        if (self.data_fit.ndim != 2 or 0 in self.data_fit.shape
+                or not np.isfinite(self.data_fit).all()
+                or (self.data_fit < 0).any()):
+            raise ValueError("data_fit must be a finite nonnegative (N, K) count matrix.")
     
     def fit_multinomial(self):
-        n = len(self.data_fit)
-        k = self.data_fit.shape[1]
-        counts = np.sum(self.data_fit, axis=0)
-        p = counts / n
-        return rv_discrete(name='multinomial', values=(np.arange(k + 1),), args=(n, p))
-    
+        """Fit a multinomial PMF to rows of counts with a common trial count."""
+        from scipy.stats import multinomial
+        totals = self.data_fit.sum(axis=1)
+        if (not np.equal(self.data_fit, np.floor(self.data_fit)).all()
+                or not np.all(totals == totals[0]) or totals[0] <= 0):
+            raise ValueError("Rows must contain integer counts with the same positive total.")
+        probabilities = self.data_fit.sum(axis=0) / self.data_fit.sum()
+        return multinomial(n=int(totals[0]), p=probabilities)
+
     def fit_categorical(self):
-        k = self.data_fit.shape[1]
-        p = np.mean(self.data_fit, axis=0)
-        return rv_discrete(name='categorical', values=(np.arange(k),), args=(p,))
+        """Fit a categorical PMF to one-hot encoded rows."""
+        if (not np.isin(self.data_fit, [0, 1]).all()
+                or not np.all(self.data_fit.sum(axis=1) == 1)):
+            raise ValueError("Categorical observations must be one-hot encoded rows.")
+        probabilities = self.data_fit.mean(axis=0)
+        return rv_discrete(name="categorical",
+                           values=(np.arange(self.data_fit.shape[1]), probabilities))
+
 
 class user_defined_func_obj:
     
@@ -265,7 +280,7 @@ class user_defined_func_obj:
             variables.update(dict(zip(int_var_name, args)))
             return self.func(**variables)
         
-        if isinstance(list(holding_var.values())[0], list) or isinstance(list(holding_var.values())[0], np.ndarray):
+        if holding_var and isinstance(next(iter(holding_var.values())), (list, np.ndarray)):
             results = []
             for vals in zip(*list(holding_var.values())):
                 holding_var_val = dict(zip(holding_var.keys(), vals))

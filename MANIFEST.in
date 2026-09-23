@@ -1,11 +1,12 @@
-include README* readme.*
-include LICENSE*
-recursive-exclude tests *
-recursive-exclude test *
-recursive-exclude docs *
-recursive-exclude examples *
-recursive-exclude Tutorials *
-global-exclude *.ipynb
-global-exclude __pycache__
-global-exclude *.py[cod]
-global-exclude .DS_Store
+include LICENSE README.md CHANGELOG.md RELEASE.md
+recursive-include docs *.md
+recursive-include examples *.py
+recursive-include tests *.py
+recursive-include test_scr *.py *.md
+recursive-include Tutorials *.ipynb *.md
+recursive-include Images *.png
+include .github/workflows/tests.yml
+prune dist
+prune build
+prune test_data
+global-exclude __pycache__ *.py[cod] .DS_Store *.pkl *.pt

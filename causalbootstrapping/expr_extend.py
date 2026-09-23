@@ -7,7 +7,7 @@ class weightExpr():
     def __init__(self, w_nom = [], w_denom = [], cause_var = {}, kernel_flag = False):
         self.w_nom = cp.deepcopy(w_nom)
         self.w_denom = cp.deepcopy(w_denom)
-        self.cause_var = cp.deepcopy(cause_var)
+        self.cause_var = {cause_var} if isinstance(cause_var, str) else set(cause_var)
         self.kernel_flag = cp.deepcopy(kernel_flag)
         self.simplify()
 
@@ -26,7 +26,7 @@ class weightExpr():
         nom_latex = "".join(nom_terms)   if nom_terms   else "1"
         denom_latex = "".join(denom_terms) if denom_terms else "1"
         lhs_latex = f"w_{{n}}"
-        rhs_latex = f"\\frac{{{nom_latex}{kernel_latex}}}{{{denom_latex}}}"
+        rhs_latex = f"\\frac{{{nom_latex}{kernel_latex}}}{{N{denom_latex}}}"
         return f"${{{lhs_latex}}}={{{rhs_latex}}}$"
 
     def rv2eval(self, var: str) -> str:
@@ -50,23 +50,17 @@ class weightExpr():
         return kernel_term
 
     def simplify(self) -> bool:
-        w_nom = self.w_nom.copy()
-        w_denom = self.w_denom.copy()
-        simplified = False
-        cancel = True
-        while cancel:
-            cancel = False
-            for term in self.w_nom:
-                if term in w_denom:
-                    w_denom.remove(term)
-                    w_nom.remove(term)
-                    cancel = True
-                    simplified = True
-        if simplified:
-            self.w_nom = w_nom.copy()
-            self.w_denom = w_denom.copy()
-        
-        return simplified
+        remaining_den = self.w_denom.copy()
+        remaining_num = []
+        changed = False
+        for term in self.w_nom:
+            if term in remaining_den:
+                remaining_den.remove(term)
+                changed = True
+            else:
+                remaining_num.append(term)
+        self.w_nom, self.w_denom = remaining_num, remaining_den
+        return changed
 
     def tostr(self, sep: str = "") -> str:
         w_nom = self.w_nom.copy()

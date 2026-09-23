@@ -165,39 +165,60 @@ def id(Y:set, X:set, G: Any) -> Tuple[Optional[IdExpr], bool]:
     id_formula = eqn.Eqn(lhs, rhs)
     return id_formula, identifiable
 
-def weight_compute(
-    w_func: WeightFunc,
-    data: DataDict,
-    intv_dict: IntvDict,
-) -> np.ndarray:
-    """
-    Compute causal bootstrapping weights for the given weight function and input observational data.
-    
-    Parameters:
-        w_func (function): The causal bootstrapping weight function to be used.
-        data (dict): A dictionary containing variable names as keys and their corresponding ndarray as values.
-        intv_dict (dict): key: str, value: float/list(len: M)/ndarray(M,), a dictionary containing the intervention variable names and their corresponding values.
-    Returns:
-        numpy.ndarray: An array containing the computed causal bootstrapping weights for each data point.
-    """
-    N = data[list(data.keys())[0]].shape[0]
-    intv_dict_expand = {}
-    for intv_var in intv_dict.keys():
-        if np.isscalar(intv_dict[intv_var]):
-            intv_dict[intv_var] = [intv_dict[intv_var]]
-        if isinstance(intv_dict[intv_var], np.ndarray):
-            if intv_dict[intv_var].ndim >= 2:
-                raise ValueError("intv_dict value should be 1-dimensional if numpy.ndarray.")
-            intv_dict[intv_var] = intv_dict[intv_var].flatten().tolist()
+def _data_arrays(data):
+    if not isinstance(data, dict) or not data:
+        raise ValueError("data must be a nonempty dictionary of arrays.")
+    arrays = {name: np.asarray(value) for name, value in data.items()}
+    if any(value.ndim not in (1, 2) for value in arrays.values()):
+        raise ValueError("Each data array must have shape (N,) or (N, d).")
+    N = len(next(iter(arrays.values())))
+    if N == 0 or any(len(value) != N for value in arrays.values()):
+        raise ValueError("All data arrays must have the same positive row count.")
+    return arrays, N
 
-        intv_dict_expand[intv_var] = np.array([intv_dict[intv_var] for i in range(N)]).reshape(N, len(intv_dict[intv_var]))
-    data_for_weight_compute = {**data, **intv_dict_expand}
-    weights = w_func(**data_for_weight_compute).reshape(-1)
-    if np.any(np.isnan(weights)):
-        number_nan = np.sum(np.isnan(weights))
-        warnings.warn(f"{number_nan} NaN values found in weights. Replacing NaNs with the minimum non-NaN weight.")
-    weights[np.isnan(weights)] = weights[~np.isnan(weights)].min()
+
+def _expand_interventions(intv_dict, N):
+    expanded = {}
+    for name, value in intv_dict.items():
+        vector = np.asarray(value)
+        if vector.ndim == 0:
+            vector = vector.reshape(1)
+        if vector.ndim != 1 or vector.size == 0:
+            raise ValueError("An intervention must be a scalar or nonempty 1D vector.")
+        expanded[name] = np.broadcast_to(vector, (N, vector.size)).copy()
+    return expanded
+
+
+def weight_compute(w_func: WeightFunc, data: DataDict, intv_dict: IntvDict,
+                   *, nan_policy: Literal["raise", "min"] = "raise") -> np.ndarray:
+    """Compute one finite nonnegative weight per observational row.
+
+    Intervention values are a scalar or a vector for a single intervention,
+    broadcast across all rows. Inputs are not mutated. By default undefined
+    weights raise ValueError. ``nan_policy='min'`` explicitly opts into the
+    historical replacement of NaNs by the minimum finite nonnegative weight;
+    it does not repair infinite/negative weights or an all-NaN vector.
+    """
+    if nan_policy not in ("raise", "min"):
+        raise ValueError("nan_policy must be 'raise' or 'min'.")
+    arrays, N = _data_arrays(data)
+    weights = np.asarray(w_func(**{**arrays, **_expand_interventions(intv_dict, N)}),
+                         dtype=float).reshape(-1).copy()
+    if weights.size != N:
+        raise ValueError("Weight function must return exactly one weight per data row.")
+    missing = np.isnan(weights)
+    if missing.any() and nan_policy == "min":
+        valid = np.isfinite(weights) & (weights >= 0)
+        if not valid.any():
+            raise ValueError("No finite nonnegative weight is available for NaN replacement.")
+        warnings.warn(f"Replacing {int(missing.sum())} NaN weights with the minimum "
+                      "finite nonnegative weight.", RuntimeWarning, stacklevel=2)
+        weights[missing] = weights[valid].min()
+    if not np.isfinite(weights).all() or (weights < 0).any():
+        raise ValueError("Weights contain NaN, infinity or negative values. "
+                         "Check estimated densities and denominator support.")
     return weights
+
 
 def build_weight_function(
     intv_prob: IdExpr,
@@ -225,16 +246,26 @@ def build_weight_function(
     def divide_functions(**funcs):
         def division(**kwargs):
             kwargs = {key.replace("'","_prime"): value for key, value in kwargs.items()}
-            result = 1
+            # ID dummy variables reuse the corresponding observational rows.
+            for key in list(kwargs):
+                if "_prime" in key:
+                    kwargs.setdefault(key.split("_prime")[0], kwargs[key])
+            def resolve(name):
+                if name in kwargs:
+                    return kwargs[name]
+                if "_prime" in name and name.split("_prime")[0] in kwargs:
+                    return kwargs[name.split("_prime")[0]]
+                raise KeyError(f"Missing data for distribution argument {name!r}.")
+            result = np.ones(N, dtype=float)
             for nom_i in w_nom_mapped:
                 func_key = ",".join(nom_i)
                 param_names = inspect.signature(funcs[func_key]).parameters
-                param = {key : kwargs[key] if kwargs[key].shape[0] != 1 else kwargs[key][0] for key in param_names}
+                param = {key: resolve(key) for key in param_names}
                 result *= funcs[func_key](**param).reshape(-1)
             for denom_i in w_denom_mapped:
                 func_key = ",".join(denom_i)
                 param_names = inspect.signature(funcs[func_key]).parameters
-                param = {key : kwargs[key] if kwargs[key].shape[0] != 1 else kwargs[key][0] for key in param_names}
+                param = {key: resolve(key) for key in param_names}
                 result /= funcs[func_key](**param).reshape(-1)
             if cause_kernel_flag:
                 param_names = inspect.signature(funcs["kernel"]).parameters
@@ -244,6 +275,15 @@ def build_weight_function(
             return result
         return division    
 
+    if isinstance(N, bool) or not isinstance(N, numbers.Integral) or N <= 0:
+        raise ValueError("N must be a positive integer.")
+    from causalbootstrapping.utils import weight_func_parse
+    if intv_prob is None or not weight_func_parse(intv_prob)[3]:
+        raise ValueError("Identification expression is not supported for automatic weighting.")
+    if set(cause_intv_name_map) != set(intv_prob.lhs.dov):
+        raise ValueError("cause_intv_name_map must cover the intervention variables.")
+    if any(k == v for k, v in cause_intv_name_map.items()):
+        raise ValueError("Use distinct names for observed and intervention variables.")
     dist_map_sep = ","
     dist_map_sorted = {}
     
@@ -288,8 +328,9 @@ def cw_bootstrapper(
     intv_dict: IntvDict,
     n_sample: int,
     sampling_mode: Literal["fast", "robust"] = "fast",
-    random_state: Optional[int] = None
-) -> Tuple[Dict[str, np.ndarray], np.ndarray]:
+    random_state: Optional[int] = None,
+    return_original_idx: bool = False
+) -> Dict[str, np.ndarray]:
     """
     Perform causal bootstrapping on the input observational data using the provided weight function and 
     designated intervention values.
@@ -301,32 +342,44 @@ def cw_bootstrapper(
         n_sample (int): The number of samples to be generated through bootstrapping.
         sampling_mode (str, optional): The mode for bootstrapping. Options: 'fast' or 'robust'. Defaults to 'fast'.
         random_state (int, optional): The random state for the bootstrapping. Defaults to None.
-        
+        return_original_idx (bool, optional): Whether to return the original indices of the samples. Defaults to False.
+
     Returns:
         bootstrap_data (dict): A dictionary containing variable names as keys and their corresponding bootstrapped data arrays as values.
-        weights (numpy.ndarray): An array containing the computed causal bootstrapping weights for each data point.
+        When return_original_idx=True, the returned dictionary also contains
+        'original_idx', an integer array of shape (n_sample, 1). No tuple is returned.
     """
-    rng = np.random.RandomState(random_state)
-    weights = weights.reshape(-1)
-    var_names = list(data.keys())
-    N = data[var_names[0]].shape[0]
-    bootstrap_data = {}
-    if sampling_mode == "fast":
-        sample_indices = rng.choice(range(N), p=weights/np.sum(weights), size=n_sample, replace=True)
-    elif sampling_mode == "robust":
-        sample_indices = [gumbel_max(weights) for _ in range(n_sample)]
-    else:
+    data, N = _data_arrays(data)
+    if isinstance(n_sample, bool) or not isinstance(n_sample, numbers.Integral) or n_sample < 0:
+        raise ValueError("n_sample must be a nonnegative integer.")
+    weights = np.asarray(weights, dtype=float).reshape(-1)
+    if (weights.size != N or not np.isfinite(weights).all()
+            or (weights < 0).any() or not (weights > 0).any()):
+        raise ValueError("weights must match the data length, be finite and nonnegative, "
+                         "and contain positive mass.")
+    if sampling_mode not in ("fast", "robust"):
         raise ValueError("Invalid mode. Choose either 'fast' or 'robust'.")
-    
-    for var in var_names:
-        bootstrap_data[var.replace("'","")] = data[var][sample_indices]
-    for intv_var in intv_dict.keys():
-        if isinstance(intv_dict[intv_var], numbers.Real) and not isinstance(intv_dict[intv_var], bool):
-            intv_dict[intv_var] = [intv_dict[intv_var]]
-        if isinstance(intv_dict[intv_var], np.ndarray):
-            if intv_dict[intv_var].ndim >= 2:
-                raise ValueError("intv_dict value should be 1-dimensional if numpy.ndarray.")
-            intv_dict[intv_var] = intv_dict[intv_var].flatten().tolist()
-        bootstrap_data[intv_var] = np.array([intv_dict[intv_var] for _ in range(n_sample)]).reshape(n_sample, len(intv_dict[intv_var]))
-
+    expanded = _expand_interventions(intv_dict, int(n_sample))
+    # Retain the historical unprimed output names without silent overwrites.
+    canonical = {}
+    for name, value in data.items():
+        name = name.replace("'", "")
+        if name in canonical and not np.array_equal(canonical[name], value):
+            raise ValueError(f"Conflicting arrays collapse to output name {name!r}.")
+        canonical[name] = value
+    if set(canonical).intersection(expanded):
+        raise ValueError("Intervention names must differ from observed output names.")
+    if return_original_idx and "original_idx" in (set(canonical) | set(expanded)):
+        raise ValueError("original_idx is reserved when return_original_idx=True.")
+    rng = np.random.RandomState(random_state)
+    if sampling_mode == "fast":
+        scaled = weights / weights.max()
+        sample_indices = rng.choice(N, p=scaled/scaled.sum(), size=n_sample, replace=True)
+    else:
+        sample_indices = np.asarray([gumbel_max(weights, rng=rng)
+                                     for _ in range(n_sample)], dtype=np.int64)
+    bootstrap_data = {name: value[sample_indices] for name, value in canonical.items()}
+    bootstrap_data.update(expanded)
+    if return_original_idx:
+        bootstrap_data["original_idx"] = sample_indices.reshape(-1, 1)
     return bootstrap_data
