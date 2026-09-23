@@ -156,8 +156,6 @@ not independent held-out data.
 - `examples/quickstart.py` and `tests/` need no external data.
 - The wheel contains the importable library and license. The source distribution
   additionally contains documentation, notebooks, examples and tests.
-- [CHANGELOG.md](CHANGELOG.md), [RELEASE.md](RELEASE.md), and
-  [validation notes](docs/VALIDATION.md) describe changes and publishing steps.
 
 ## Citation
 
