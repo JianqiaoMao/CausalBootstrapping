@@ -110,7 +110,7 @@ index labels.
 
 | Interface | Purpose |
 | --- | --- |
-| `backend.id(Y, X, G)` | Identify `p(Y | do(X))`; returns `(equation, identifiable)`. |
+| `backend.id(Y, X, G)` | Identify p(Y | do(X)); returns `(equation, identifiable)`. |
 | `workflows.general_cb_analysis(...)` | Analyze a graph; return a weight builder and `weightExpr`. |
 | `backend.build_weight_function(...)` | Compile a supported ID equation using a distribution map. |
 | `backend.weight_compute(...)` | Evaluate one causal weight per observational row. |
